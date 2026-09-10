@@ -95,6 +95,19 @@ jobs:
           cd core
           cargo build -p mediacore-media --target x86_64-pc-windows-gnu
 
+      # Fixtures are generated, not committed. Without them the media tests
+      # SKIP — and a green "tests passed" that ran nothing is the exact failure
+      # this project already hit once with a check that silently vanished.
+      #
+      # This is the system ffmpeg, GPL and never shipped; ours is built
+      # --disable-programs and has no CLI. tools/prep_corpus.sh says so too.
+      - name: Test fixtures
+        shell: msys2 {0}
+        run: |
+          pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-ffmpeg
+          tools/prep_corpus.sh || echo "::warning::some fixtures could not be built"
+          ls -la media/ | head -20
+
       - name: Test the media crate
         shell: msys2 {0}
         run: |
@@ -103,4 +116,11 @@ jobs:
           export FFMPEG_LINK_MODE=dynamic
           export PATH="$(pwd)/build/ffmpeg-lgpl/bin:$PATH"
           cd core
-          cargo test -p mediacore-media --target x86_64-pc-windows-gnu
+          cargo test -p mediacore-media --target x86_64-pc-windows-gnu -- --nocapture 2>&1 | tee /tmp/wintests.log
+          # A run where everything skipped is not a pass. The macOS suite runs
+          # 45; anything far below that means the fixtures did not build.
+          passed=$(grep -oE 'ok\. [0-9]+' /tmp/wintests.log | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          echo "media tests passed on Windows: $passed"
+          if [ "$passed" -lt 10 ]; then
+            echo "::warning::only $passed media tests ran — fixtures are probably missing"
+          fi

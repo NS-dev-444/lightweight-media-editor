@@ -9,9 +9,23 @@
 # separately inside each encoder run, which would let encoders be scored on
 # slightly different source pixels.
 set -euo pipefail
-FFMPEG="${FFMPEG:-/opt/homebrew/bin/ffmpeg}"   # measurement tooling, never shipped
+# Measurement tooling, NEVER shipped — this is deliberately the system ffmpeg
+# (GPL on most machines) and must never be confused with the LGPL build in
+# build/ffmpeg-lgpl. Ours is configured --disable-programs and has no CLI at all.
+#
+# The hardcoded Homebrew path was a macOS assumption; prefer whatever is on PATH
+# so this runs on a Windows runner too.
+if [[ -z "${FFMPEG:-}" ]]; then
+  if command -v ffmpeg >/dev/null 2>&1; then FFMPEG="ffmpeg"
+  elif [[ -x /opt/homebrew/bin/ffmpeg ]]; then FFMPEG="/opt/homebrew/bin/ffmpeg"
+  else echo "no ffmpeg found; fixtures cannot be built" >&2; exit 1
+  fi
+fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/media/corpus"
+# The synthetic fixtures write here too, and a fresh checkout has no media/ at
+# all — it is generated, not committed.
+mkdir -p "$OUT"
 
 prep() {  # $1 dir  $2 glob  $3 fps  $4 start-number
   local dir="$OUT/$1" pat="$2" fps="$3" start="$4"
@@ -79,10 +93,14 @@ drawtext=text='}':fontcolor=0xd4d4d4:fontsize=28:x=60:y=230+mod(t*40\,200)" \
 #                     Built with aevalsrc, not sine+volume: the amplitude has to
 #                     be stated outright for the expected value to mean anything.
 #   gap.wav           tone, two seconds of true silence, tone.
+# -f lavfi is required: without it ffmpeg treats the filter string as a
+# filename. It was dropped when this fixture was switched from sine to
+# aevalsrc, and the `|| echo skipped` swallowed it — the loudness calibration
+# test then silently had no fixture to run against.
 "$FFMPEG" -hide_banner -loglevel error -y \
-  -i "aevalsrc=0.1*sin(2*PI*1000*t)|0.1*sin(2*PI*1000*t):s=48000:d=6" \
+  -f lavfi -i "aevalsrc=0.1*sin(2*PI*1000*t)|0.1*sin(2*PI*1000*t):s=48000:d=6" \
   -ac 2 -c:a pcm_s16le "$ROOT/media/tone_-20dbfs.wav" \
-  && printf "  %-16s 1 kHz at -20 dBFS\n" "tone_-20dbfs" || echo "  tone: skipped"
+  && printf "  %-16s 1 kHz at -20 dBFS\n" "tone_-20dbfs" || echo "  tone: FAILED"
 "$FFMPEG" -hide_banner -loglevel error -y \
   -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=1" \
   -f lavfi -i "anullsrc=r=48000:cl=stereo:duration=2" \
