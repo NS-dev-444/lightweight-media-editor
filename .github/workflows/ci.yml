@@ -60,6 +60,16 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     continue-on-error: true
+    # Its OWN concurrency group, and it is never cancelled mid-build.
+    #
+    # The workflow-level `cancel-in-progress` killed this job three times: it
+    # takes the better part of an hour, so any push during it wins. That is a
+    # livelock, not an inconvenience — the build never finishes, so it never
+    # populates the cache, so the next run starts from scratch and is cancelled
+    # in turn. A long job that feeds a cache has to be allowed to finish once.
+    concurrency:
+      group: windows-media
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
