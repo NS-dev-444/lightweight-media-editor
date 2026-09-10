@@ -86,6 +86,29 @@ actual="$(shasum -a 256 "${TARBALL}" | awk '{print $1}')"
   || die "SHA256 mismatch. expected ${FFMPEG_SHA256}, got ${actual}"
 
 if command -v gpg >/dev/null 2>&1 && [[ -f "${TARBALL}.asc" ]]; then
+  # Import the release key if this machine has never seen it — a fresh CI
+  # runner never has, and the first CI run failed here.
+  #
+  # This does NOT weaken the check. The fingerprint above is the trust anchor
+  # and it is hardcoded; a key that does not carry it is refused regardless of
+  # where the bytes came from. Fetching a key and then verifying its
+  # fingerprint is exactly as strong as importing it by hand.
+  if ! gpg --list-keys "${FFMPEG_GPG_FINGERPRINT}" >/dev/null 2>&1; then
+    log "Importing the FFmpeg release key"
+    if curl -fsSL --max-time 30 "https://ffmpeg.org/ffmpeg-devel.asc" -o "${WORK_DIR}/ffmpeg-key.asc"; then
+      gpg --import "${WORK_DIR}/ffmpeg-key.asc" >/dev/null 2>&1 || true
+    fi
+    # Keyservers are flaky; the project's own site is the primary source and
+    # this is the fallback rather than the other way round.
+    if ! gpg --list-keys "${FFMPEG_GPG_FINGERPRINT}" >/dev/null 2>&1; then
+      gpg --keyserver hkps://keyserver.ubuntu.com \
+          --recv-keys "${FFMPEG_GPG_FINGERPRINT}" >/dev/null 2>&1 || true
+    fi
+    gpg --list-keys "${FFMPEG_GPG_FINGERPRINT}" >/dev/null 2>&1 \
+      || die "Could not obtain the FFmpeg release key ${FFMPEG_GPG_FINGERPRINT}. \
+Import it manually and re-run; do NOT remove this check."
+  fi
+
   log "Verifying GPG signature against ${FFMPEG_GPG_FINGERPRINT}"
   if gpg --verify "${TARBALL}.asc" "${TARBALL}" 2>&1 | grep -q "Good signature"; then
     gpg --verify "${TARBALL}.asc" "${TARBALL}" 2>&1 \
