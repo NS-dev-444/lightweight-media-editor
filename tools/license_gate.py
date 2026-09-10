@@ -72,13 +72,18 @@ def config_from_binary(path: Path) -> str:
 
 def config_from_prefix(prefix: Path) -> str:
     """Recover the configuration string embedded in libavutil."""
+    # bin/ as well as lib/: a MinGW build puts the real DLL in bin/
+    # (avutil-59.dll) and only an import stub in lib/ (libavutil.dll.a). The
+    # stub carries no configuration string, so searching lib/ alone finds
+    # nothing on Windows and falls through to a slow walk of the whole prefix.
     candidates = sorted(
-        p for pat in ("libavutil*.dylib", "libavutil*.so*", "avutil*.dll")
-        for p in (prefix / "lib").glob(pat)
+        p for pat in ("libavutil*.dylib", "libavutil*.so*", "avutil*.dll", "libavutil*.dll")
+        for d in (prefix / "lib", prefix / "bin")
+        for p in d.glob(pat)
     )
     if not candidates:
         candidates = sorted(
-            p for pat in ("libavutil*.dylib", "libavutil*.so*", "avutil*.dll")
+            p for pat in ("libavutil*.dylib", "libavutil*.so*", "avutil*.dll", "libavutil*.dll")
             for p in prefix.rglob(pat)
         )
     if not candidates:

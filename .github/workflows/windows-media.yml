@@ -48,6 +48,8 @@ jobs:
           install: >-
             base-devel git curl tar diffutils make nasm yasm pkg-config
             mingw-w64-ucrt-x86_64-gcc
+            python
+            mingw-w64-ucrt-x86_64-ffmpeg
 
       - name: Rust toolchain
         run: |
@@ -104,7 +106,6 @@ jobs:
       - name: Test fixtures
         shell: msys2 {0}
         run: |
-          pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-ffmpeg
           tools/prep_corpus.sh || echo "::warning::some fixtures could not be built"
           ls -la media/ | head -20
 
