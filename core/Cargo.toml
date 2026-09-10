@@ -1,0 +1,20 @@
+# Phase 2 workspace. Unlike spikes/, this code is kept.
+[workspace]
+resolver = "2"
+members = ["mediacore-model", "mediacore-media"]
+default-members = ["mediacore-model"]  # media needs FFmpeg env vars; see WINDOWS_BRINGUP.md
+
+# The split is deliberate and load-bearing:
+#   mediacore-model  no FFmpeg  -> cross-checks for Windows from ANY machine
+#   mediacore-media  FFmpeg FFI -> needs a real Windows runner (R-21)
+# Building mediacore-media requires FFMPEG_INCLUDE_DIR, FFMPEG_LIBS_DIR and
+# FFMPEG_LINK_MODE=dynamic pointing at our own LGPL build. See
+# docs/WINDOWS_BRINGUP.md and third_party/ffmpeg/build.sh.
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.85"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

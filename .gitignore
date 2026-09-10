@@ -1,0 +1,25 @@
+# Build output — never committed. Reproduce with third_party/ffmpeg/build.sh
+build/
+
+# The built app bundle. 126 MB — FFmpeg dylibs plus the 57 MB caption model —
+# and reproducible with app/macos/build_app.sh.
+app/macos/Editor.app/
+
+# Rust build output — anywhere, not just in spikes/. This was missed once and
+# would have committed 636 MB across 33,717 files.
+target/
+
+# Spike artifacts. The spikes are Phase 1 EVIDENCE — their sources and results
+# are kept — but their compiled binaries are output like any other.
+spikes/**/*.o
+spikes/**/.build/
+spikes/s1-zerocopy/s1
+spikes/s6-isolation/s6-host
+spikes/s6-isolation/s6-worker
+spikes/s7-waveform/s7
+spikes/s8-sandbox/S8Test.app/
+# Test fixtures are GENERATED, not committed: tools/fetch_corpus.sh downloads
+# the film frames and tools/prep_corpus.sh builds everything else.
+media/
+
+.DS_Store

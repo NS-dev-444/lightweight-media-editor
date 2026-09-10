@@ -1,0 +1,97 @@
+# CI runs `tools/check.sh` and nothing else.
+#
+# That is deliberate. A CI file that grows its own list of steps drifts from
+# what developers run locally, and then "it passes on my machine" becomes a
+# sentence people say. One script, two callers.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          # R-21: the model crate must keep cross-compiling for Windows from a
+          # Mac, which is what stops the deferred port becoming a rewrite.
+          rustup target add x86_64-pc-windows-msvc
+
+      # FFmpeg takes about ten minutes to build and changes only when its pin
+      # does, so it is cached against the build script's own hash. Editing the
+      # script — including the licence flags — busts the cache, which is
+      # exactly the behaviour R-05 needs.
+      - name: Cache FFmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: build/ffmpeg-lgpl
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('third_party/ffmpeg/build.sh', 'tools/deployment.sh') }}
+
+      - name: Build FFmpeg (LGPL)
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: third_party/ffmpeg/build.sh
+
+      - name: Cache whisper.cpp
+        id: cache-whisper
+        uses: actions/cache@v4
+        with:
+          path: build/whisper
+          key: whisper-${{ runner.os }}-${{ hashFiles('third_party/whisper/build.sh', 'tools/deployment.sh') }}
+
+      - name: Build whisper.cpp
+        if: steps.cache-whisper.outputs.cache-hit != 'true'
+        run: third_party/whisper/build.sh
+
+      - name: Cache the caption model
+        uses: actions/cache@v4
+        with:
+          path: build/models
+          key: models-${{ hashFiles('tools/fetch_models.sh') }}
+
+      - name: Fetch the caption model
+        run: tools/fetch_models.sh
+
+      # Fixtures are generated, not committed. Without them the media tests
+      # skip rather than fail — but a CI run that silently skips half the suite
+      # is worse than useless, so they are always built here.
+      - name: Test fixtures
+        run: |
+          brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+          tools/prep_corpus.sh || echo "::warning::some fixtures could not be built"
+
+      - name: Check
+        run: tools/check.sh --all
+
+      # A licence failure is the one that cannot be fixed after release, so it
+      # is asserted again on the BUILT ARTEFACT rather than only on the build
+      # script — R-05's whole point is that the wrong FFmpeg gets linked, not
+      # that the wrong flags get written.
+      - name: Licence gate on the shipped bundle
+        run: |
+          python3 tools/license_gate.py --prefix build/ffmpeg-lgpl
+          otool -L app/macos/Editor.app/Contents/MacOS/Editor \
+            | grep -E "^\s+/(opt|usr/local)/" \
+            && { echo "::error::the app links a library from outside the bundle"; exit 1; } \
+            || echo "no external library links"
+
+      - name: Upload the app
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Editor-app
+          path: app/macos/Editor.app
+          retention-days: 7

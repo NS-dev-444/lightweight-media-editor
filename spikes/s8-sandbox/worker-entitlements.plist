@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- A helper inside a sandboxed app must INHERIT the parent's sandbox.
+       Carrying app-sandbox alone, with no container of its own, makes the
+       kernel kill it at exec (SIGTRAP). This pair is the documented pattern
+       for child processes of a sandboxed app. -->
+  <key>com.apple.security.app-sandbox</key><true/>
+  <key>com.apple.security.inherit</key><true/>
+</dict></plist>

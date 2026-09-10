@@ -1,0 +1,16 @@
+[package]
+name = "mediacore-model"
+version = "0.1.0"
+edition.workspace = true
+
+# Deliberately NO FFmpeg dependency. This crate holds the project document,
+# timeline, command/undo stack and cache policy -- the large, long-lived,
+# concurrent part where Rust's guarantees actually pay, and the part that is
+# almost all of Phase 2's work.
+#
+# Keeping it FFmpeg-free means it CROSS-CHECKS for Windows from any machine,
+# which makes RISK_REGISTER.md R-21 partially enforceable without a Windows
+# runner. The FFmpeg-bound crate still needs real Windows CI.
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

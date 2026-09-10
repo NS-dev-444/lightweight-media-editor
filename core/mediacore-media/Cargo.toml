@@ -1,0 +1,18 @@
+[package]
+name = "mediacore-media"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "mediacore"
+# staticlib for the C ABI consumed by Swift/C#; rlib so other Rust
+# crates (and this crate's own tests) can link it normally.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+rusty_ffmpeg = "0.17"
+mediacore-model = { path = "../mediacore-model" }
+serde_json = { workspace = true }
+
+[build-dependencies]
+cbindgen = "0.29"

@@ -1,0 +1,25 @@
+# Generates the C ABI header from the Rust source, so the two cannot drift.
+# During Phase 1 the hand-written header silently fell out of sync with the
+# Rust struct and produced a compile error at the call site -- a mild symptom
+# of a failure mode that, with a struct layout mismatch, would instead be
+# silent memory corruption across the FFI.
+language = "C"
+include_guard = "MEDIACORE_H"
+tab_width = 4
+documentation_style = "c99"
+cpp_compat = true
+
+[export]
+include = ["MCInfo", "MCProbe", "MCClipView", "MCPlanLayer"]
+# CFRetain is an internal extern used by the data plane; it is not part of our
+# public ABI and must not appear in the shipped header.
+exclude = ["CFRetain"]
+
+[parse]
+parse_deps = false
+
+[fn]
+sort_by = "None"
+
+[enum]
+prefix_with_name = true
