@@ -34,7 +34,9 @@ finish() {
   if [[ ${#FAILED[@]} -eq 0 ]]; then
     printf "\033[32m%s checks passed\033[0m" "$PASSED"
     [[ $SKIPPED -gt 0 ]] && printf ", \033[33m%s skipped\033[0m" "$SKIPPED"
-    echo
+    # The total is printed so a check that stops running is VISIBLE. One did:
+    # it read a file that CI does not cache, and simply stopped appearing.
+    printf " \033[2m(of %s)\033[0m\n" "$((PASSED + SKIPPED))"
     exit 0
   fi
   printf "\033[31m%s FAILED\033[0m (%s passed)\n" "${#FAILED[@]}" "$PASSED"
@@ -97,6 +99,8 @@ if have_whisper && have_ffmpeg_build; then
   else
     pass "media crate builds without whisper too"
   fi
+else
+  skip "media crate builds without whisper" "needs both an FFmpeg and a whisper build"
 fi
 
 # ---------------------------------------------------------------- 2. §22
@@ -156,12 +160,25 @@ fi
 
 # whisper.cpp is MIT and the build script checks that. Verify the checker is
 # actually looking at something (DEPENDENCY_AND_LICENSE_AUDIT.md §6b).
-if [[ -f build/whisper-src/LICENSE ]]; then
-  if grep -q "MIT License" build/whisper-src/LICENSE; then
+# Read from the PREFIX, not the source tree. The source tree is not cached, so
+# reading it there meant this check silently vanished on every cached CI run —
+# no skip line, no failure, just a total that quietly went from 13 to 12.
+#
+# A check that can disappear is worse than one that fails: nothing is watching
+# the count. Hence the else-skip below, and the same on every conditional check
+# in this file.
+WHISPER_LICENCE="build/whisper/share/licences/whisper.cpp-MIT.txt"
+if [[ -f "$WHISPER_LICENCE" ]]; then
+  if grep -q "MIT License" "$WHISPER_LICENCE"; then
     pass "whisper.cpp is still MIT"
   else
-    fail "whisper.cpp is still MIT" "LICENSE no longer says MIT — see audit §6b"
+    fail "whisper.cpp is still MIT" "the licence no longer says MIT — see audit §6b"
   fi
+elif have_whisper; then
+  fail "whisper.cpp is still MIT" \
+       "$WHISPER_LICENCE is missing — the build must install it beside the library"
+else
+  skip "whisper.cpp is still MIT" "no whisper build"
 fi
 
 # ---------------------------------------------------------------- 4. the app

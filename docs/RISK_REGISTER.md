@@ -503,9 +503,14 @@ Each gate was verified to **fail** as well as pass: a planted `unwrap()`, a
 planted unused variable, a floor moved without rebuilding, and the Homebrew GPL
 FFmpeg pointed at the licence gate (correctly rejected, `--enable-gpl`).
 
-**Still open:** CI has never actually run — there is no remote yet. The workflow
-is written against `macos-15` runners and the first real run should be expected
-to need adjustment.
+**CI is green**, on a clean runner and on a cached one.
+
+**A check vanished, and that is the risk's real shape.** "whisper.cpp is still
+MIT" read a file CI does not cache, so on every cached run its guard was false,
+its `if` had no `else`, and it stopped existing — no skip, no failure, a total
+that quietly went 13 → 12. A failing check is loud and a skipped one is visible,
+but a vanished one leaves no trace. Every conditional check now has an `else`,
+and the summary prints the expected total so a shrinking suite is noticeable.
 
 ---
 
