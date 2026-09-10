@@ -82,11 +82,30 @@ something on purpose:
 The licence gate also **fails closed**: a missing or unreadable target exits
 non-zero rather than reporting success.
 
-## First run
+## Caching
 
-**CI has never run** — there is no git remote yet. The workflow targets
-`macos-15` runners and caches FFmpeg, whisper.cpp and the model against the hash
-of their build scripts, so editing a build script (including its licence flags)
-busts the cache. That is the behaviour R-05 needs.
+FFmpeg, whisper.cpp and the caption model are cached against the **hash of their
+build scripts**, so editing a build script — including its licence flags — busts
+the cache and forces a rebuild. That is the behaviour R-05 needs: a change to the
+configure flags must never be validated against a cached artefact built with the
+old ones.
 
-Expect the first real run to need adjustment.
+## The first run failed, and that was correct
+
+It failed at **GPG verification of the FFmpeg tarball**. A fresh runner has never
+seen the FFmpeg release key, so a perfectly valid signature could not be
+verified.
+
+The fix was to import the key, not to skip the check. `third_party/ffmpeg/build.sh`
+now fetches it from ffmpeg.org (keyserver as fallback) when it is absent.
+
+**This does not weaken the check.** The fingerprint
+`FCF986EA15E6E293A5644F10B4322F04D67658D8` is hardcoded in the script and is the
+trust anchor; a key that does not carry it is refused whatever its source.
+Fetching a key and then verifying its fingerprint is exactly as strong as
+importing it by hand — and it means a fresh machine, not just a fresh runner,
+can build without a manual step.
+
+The tempting fix — dropping to "SHA256 only", which the script already allows
+when `gpg` is missing — would have removed a supply-chain protection to make a
+red tick go green. Worth naming as the thing not to do.

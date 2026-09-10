@@ -23,6 +23,14 @@ A single page to pick up from. Details live in the per-phase documents.
 export half, and auditing §6 line by line found thirteen ratified items with no
 code behind them. Phase 4 closed that, Phase 7 closed captions.
 
+## Where the code lives
+
+`github.com/NS-dev-444/lightweight-media-editor` — **private**. Build output,
+the app bundle, the caption model and the generated fixtures are all excluded;
+what is committed is 120 files of source, scripts and documentation.
+
+CI runs `tools/check.sh` on every push (`CI.md`).
+
 ## The app today
 
 ```bash
@@ -85,19 +93,16 @@ tools/prep_corpus.sh            # test fixtures
 
 ## Pick up here
 
-1. **CI has never actually run** — there is no git remote yet.
-   `.github/workflows/ci.yml` is written against `macos-15` runners and should
-   be expected to need adjustment on its first real run.
-2. **Windows bring-up** when the machine is ready. `WINDOWS_BRINGUP.md` is
+1. **Windows bring-up** when the machine is ready. `WINDOWS_BRINGUP.md` is
    ordered so nothing blocks, and only `mediacore-media` needs the box.
-3. **MP4 → WebM**, which needs libvpx in the FFmpeg build and an AD-12
+2. **MP4 → WebM**, which needs libvpx in the FFmpeg build and an AD-12
    amendment (VP8/VP9 are royalty-free, so the hardware-only rationale does not
    reach them).
-4. **Merge keeps no audio on its re-encode path** — it should resample and mix.
-5. **MIT attribution for whisper.cpp and the Whisper model** must appear in the
+3. **Merge keeps no audio on its re-encode path** — it should resample and mix.
+4. **MIT attribution for whisper.cpp and the Whisper model** must appear in the
    app's acknowledgements before any release
-   (`DEPENDENCY_AND_LICENSE_AUDIT.md` §8).
-6. **No app icon, no installer, no first-run experience.** None started.
+   (`DEPENDENCY_AND_LICENSE_AUDIT.md` §8). This is the next release blocker.
+5. **No app icon, no installer, no first-run experience.** None started.
 
 ## Decisions still yours
 
