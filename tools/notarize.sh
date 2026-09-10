@@ -16,8 +16,18 @@
 #   ASC_ISSUER     the issuer UUID from App Store Connect
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="$ROOT/app/macos/Editor.app"
+# The release build lives in build/release, NOT in app/macos/Editor.app.
+#
+# They shared a path once, and it cost a notarization: `tools/check.sh` rebuilds
+# the app, and without DEVELOPER_ID in that shell it re-signed the bundle ad-hoc
+# — silently replacing a Developer-ID-signed, freshly-notarized bundle with one
+# Gatekeeper rejects. The ticket was still valid; the app it belonged to was
+# gone.
+#
+# A release artefact that any routine command can overwrite is not an artefact.
+DEV_APP="$ROOT/app/macos/Editor.app"
 OUT="$ROOT/build/release"
+APP="$OUT/Editor.app"
 
 need() { [[ -n "${!1:-}" ]] || { echo "ERROR: $1 is not set" >&2; exit 2; }; }
 need DEVELOPER_ID; need ASC_KEY; need ASC_KEY_ID; need ASC_ISSUER
@@ -27,6 +37,11 @@ step() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
 
 step "Building signed"
 DEVELOPER_ID="$DEVELOPER_ID" "$ROOT/app/macos/build_app.sh" >/dev/null
+
+# Move it out of the working directory before anything else can touch it.
+mkdir -p "$OUT"
+rm -rf "$APP"
+/usr/bin/ditto "$DEV_APP" "$APP"
 
 # Confirm before uploading. Submitting an unsigned or ad-hoc-signed app wastes a
 # round trip to Apple and comes back with a rejection that says less than this.
@@ -80,4 +95,6 @@ rm -f "$ZIP"
 /usr/bin/ditto -c -k --keepParent --sequesterRsrc "$APP" "$ZIP"
 
 step "Done"
-printf '    %s  (%s)\n' "$ZIP" "$(du -h "$ZIP" | cut -f1)"
+printf '    app: %s\n' "$APP"
+printf '    zip: %s  (%s)\n' "$ZIP" "$(du -h "$ZIP" | cut -f1)"
+printf '    \033[2mapp/macos/Editor.app remains the DEV build and may be rebuilt freely.\033[0m\n' 
