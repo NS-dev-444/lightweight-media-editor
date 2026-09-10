@@ -100,7 +100,31 @@ Then `tools/fetch_models.sh` for the SHA256-pinned model.
 
 ### 2. Build FFmpeg — LGPL only
 
-`third_party/ffmpeg/build.sh` already has a Windows branch (`--enable-d3d11va --enable-dxva2`), but **it has never run**. Expect it to need work; that is the point of doing this early.
+`third_party/ffmpeg/build.sh` has a Windows branch (`--enable-d3d11va
+--enable-dxva2`) that **has still never run**. But five macOS assumptions that
+would have stopped it dead were found by *reading* it rather than by a failed CI
+run, and are now fixed:
+
+| Was | Now |
+|---|---|
+| `shasum -a 256` | `sha256()` — picks `shasum` or `sha256sum`, dies if neither exists rather than skipping verification |
+| `sysctl -n hw.ncpu` | `ncpu()` — prefers `nproc` |
+| `sed -i ''` (BSD form) | `sed_inplace()` — GNU sed takes `-i` with no argument |
+| "is LAME built?" tested for `.dylib`/`.so` | tests `$SHLIB_EXT`, and `bin/*.dll` for Windows |
+| `--install-name-dir=@rpath` and `-mmacosx-version-min` unconditional | moved into a `Darwin)` branch — the first is a Mach-O concept, the second is not a flag any Windows compiler accepts |
+
+They are written as **capability checks rather than `uname` branches** wherever
+possible: "does this machine have `sha256sum`" survives a platform nobody has
+thought of; "is this macOS" does not.
+
+The macOS path was rebuilt from scratch afterwards to prove the refactor changed
+nothing — a licence-critical script is not somewhere to take a refactor on
+faith.
+
+**What is still unproven on Windows:** whether MSYS2's toolchain builds FFmpeg
+at all here, whether LAME's configure works, and whether the DLL layout the
+media crate expects matches what `--enable-shared` produces. Those need the
+runner.
 
 Non-negotiable, exactly as on macOS:
 - **never** `--enable-gpl`, `--enable-nonfree`, `--enable-version3`

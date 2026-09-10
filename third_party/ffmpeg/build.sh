@@ -61,6 +61,46 @@ DENIED_FLAGS=(
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
+# --- portability ------------------------------------------------------------
+#
+# This script has only ever run on macOS. The differences below are the ones
+# that would stop it under MSYS2 on Windows, found by reading rather than by a
+# failed CI run — see docs/WINDOWS_BRINGUP.md §2.
+#
+# They are written as capability checks rather than `uname` branches wherever
+# possible: "does this machine have sha256sum" survives a platform we have not
+# thought of, and "is this macOS" does not.
+
+# macOS ships `shasum`; most Linux and MSYS2 ship `sha256sum`. Neither is
+# guaranteed, so pick whichever exists and fail loudly if neither does.
+sha256() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else die "no sha256 tool found (need shasum or sha256sum); refusing to skip verification"
+  fi
+}
+
+# `sysctl -n hw.ncpu` is macOS; `nproc` is GNU. The fallback matters less than
+# not failing under `set -u`.
+ncpu() {
+  if command -v nproc >/dev/null 2>&1; then nproc
+  elif command -v sysctl >/dev/null 2>&1; then sysctl -n hw.ncpu 2>/dev/null || echo 4
+  else echo 4
+  fi
+}
+
+# The shared-library suffix, which the "is LAME already built" test needs.
+case "$(uname -s)" in
+  Darwin)               SHLIB_EXT="dylib" ;;
+  MINGW*|MSYS*|CYGWIN*) SHLIB_EXT="dll" ;;
+  *)                    SHLIB_EXT="so" ;;
+esac
+
+# GNU sed needs `-i` with no argument; BSD/macOS sed needs `-i ''`.
+sed_inplace() {
+  if sed --version >/dev/null 2>&1; then sed -i "$@"; else sed -i '' "$@"; fi
+}
+
 mkdir -p "${WORK_DIR}"
 
 # Wipe a prefix built for a different macOS floor — see DEPLOYMENT_STAMP above.
@@ -81,7 +121,7 @@ if [[ ! -f "${TARBALL}" ]]; then
 fi
 
 log "Verifying SHA256"
-actual="$(shasum -a 256 "${TARBALL}" | awk '{print $1}')"
+actual="$(sha256 "${TARBALL}")"
 [[ "${actual}" == "${FFMPEG_SHA256}" ]] \
   || die "SHA256 mismatch. expected ${FFMPEG_SHA256}, got ${actual}"
 
@@ -156,7 +196,8 @@ fi
 LAME_TARBALL="lame-${LAME_VERSION}.tar.gz"
 LAME_SRC="${WORK_DIR}/lame-${LAME_VERSION}"
 
-if [[ ! -f "${PREFIX}/lib/libmp3lame.dylib" && ! -f "${PREFIX}/lib/libmp3lame.so" ]]; then
+if ! ls "${PREFIX}"/lib/libmp3lame*."${SHLIB_EXT}" >/dev/null 2>&1 \
+   && ! ls "${PREFIX}"/bin/libmp3lame*.dll >/dev/null 2>&1; then
   cd "${WORK_DIR}"
   if [[ ! -f "${LAME_TARBALL}" ]]; then
     log "Downloading ${LAME_TARBALL}"
@@ -164,7 +205,7 @@ if [[ ! -f "${PREFIX}/lib/libmp3lame.dylib" && ! -f "${PREFIX}/lib/libmp3lame.so
       "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/${LAME_TARBALL}"
   fi
   log "Verifying LAME SHA256"
-  lame_actual="$(shasum -a 256 "${LAME_TARBALL}" | awk '{print $1}')"
+  lame_actual="$(sha256 "${LAME_TARBALL}")"
   [[ "${lame_actual}" == "${LAME_SHA256}" ]] \
     || die "LAME SHA256 mismatch. expected ${LAME_SHA256}, got ${lame_actual}"
 
@@ -175,7 +216,7 @@ if [[ ! -f "${PREFIX}/lib/libmp3lame.dylib" && ! -f "${PREFIX}/lib/libmp3lame.so
   # export is a build fix, not a functional change.
   if grep -q "^lame_init_old$" "${LAME_SRC}/include/libmp3lame.sym" 2>/dev/null; then
     log "Removing stale lame_init_old export (LAME 3.100 build fix)"
-    sed -i '' '/^lame_init_old$/d' "${LAME_SRC}/include/libmp3lame.sym"
+    sed_inplace '/^lame_init_old$/d' "${LAME_SRC}/include/libmp3lame.sym"
   fi
 
   log "Building LAME"
@@ -184,7 +225,7 @@ if [[ ! -f "${PREFIX}/lib/libmp3lame.dylib" && ! -f "${PREFIX}/lib/libmp3lame.so
       --disable-frontend \
       > "${WORK_DIR}/lame-configure.log" 2>&1 \
     || { tail -20 "${WORK_DIR}/lame-configure.log"; die "LAME configure failed"; }
-  make -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)" > "${WORK_DIR}/lame-make.log" 2>&1 \
+  make -j"$(ncpu)" > "${WORK_DIR}/lame-make.log" 2>&1 \
     || { tail -20 "${WORK_DIR}/lame-make.log"; die "LAME build failed"; }
   make install > "${WORK_DIR}/lame-install.log" 2>&1 || die "LAME install failed"
 
@@ -208,11 +249,23 @@ CONFIGURE_FLAGS=(
   --disable-programs          # we ship libraries, not the ffmpeg CLI
   --disable-doc
   --disable-autodetect        # reproducibility: never silently absorb system libs
-  --install-name-dir=@rpath   # required for bundling into a .app
   --enable-libmp3lame         # LGPL v2+. Required for spec §4 MP3 export.
-  --extra-cflags="-I${PREFIX}/include -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}"
-  --extra-ldflags="-L${PREFIX}/lib -mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}"
+  --extra-cflags="-I${PREFIX}/include"
+  --extra-ldflags="-L${PREFIX}/lib"
 )
+
+# Platform flags. These were unconditional and macOS-only, which would have
+# stopped configure dead under MSYS2: `--install-name-dir` is a Mach-O concept
+# and `-mmacosx-version-min` is not a flag any Windows compiler accepts.
+case "$(uname -s)" in
+  Darwin)
+    CONFIGURE_FLAGS+=(
+      --install-name-dir=@rpath   # required for bundling into a .app
+      --extra-cflags="-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}"
+      --extra-ldflags="-mmacosx-version-min=${MACOS_DEPLOYMENT_TARGET}"
+    )
+    ;;
+esac
 
 case "$(uname -s)" in
   Darwin)
@@ -241,8 +294,8 @@ log "Configuring"
 # ---------------------------------------------------------------------------
 # 4. Build and install
 # ---------------------------------------------------------------------------
-log "Building with $(sysctl -n hw.ncpu 2>/dev/null || echo 4) jobs"
-make -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)" > "${WORK_DIR}/make.log" 2>&1 \
+log "Building with $(ncpu) jobs"
+make -j"$(ncpu)" > "${WORK_DIR}/make.log" 2>&1 \
   || { tail -30 "${WORK_DIR}/make.log"; die "build failed (see ${WORK_DIR}/make.log)"; }
 
 log "Installing to ${PREFIX}"
