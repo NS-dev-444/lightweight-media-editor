@@ -211,6 +211,51 @@ else
     pass "everything targets macOS $MACOS_DEPLOYMENT_TARGET"
   fi
 
+  # Licences are a legal obligation, and one that quietly stops being met the
+  # moment somebody adds a dependency. Assert on the SHIPPED file, and that it
+  # actually names each thing in the bundle.
+  ACK="$APP/Contents/Resources/Acknowledgements.txt"
+  if [[ ! -f "$ACK" ]]; then
+    fail "acknowledgements ship with the app" "$ACK is missing"
+  else
+    absent=""
+    grep -q "GNU LESSER GENERAL PUBLIC LICENSE" "$ACK" || absent+="the LGPL text"$'\n'
+    ls "$APP"/Contents/Frameworks/libmp3lame*.dylib >/dev/null 2>&1 &&
+      ! grep -q "^LAME " "$ACK" && absent+="LAME"$'\n'
+    if [[ -f "$APP/Contents/Resources/ggml-base-q5_1.bin" ]]; then
+      grep -q "whisper.cpp" "$ACK" || absent+="whisper.cpp"$'\n'
+      grep -q "Copyright (c) 2022 OpenAI" "$ACK" || absent+="the Whisper model weights"$'\n'
+    fi
+    # Every crate cargo says ships must be named.
+    while read -r crate; do
+      [[ -z "$crate" ]] && continue
+      grep -q "^$crate " "$ACK" || absent+="crate $crate"$'\n'
+    done < <(cd core && cargo metadata --format-version 1 \
+               --filter-platform aarch64-apple-darwin 2>/dev/null \
+             | python3 -c "
+import json,sys
+m=json.load(sys.stdin)
+pkgs={p['id']:p for p in m['packages']}
+nodes={n['id']:n for n in m['resolve']['nodes']}
+seen=set()
+def walk(i):
+    if i in seen: return
+    seen.add(i)
+    for d in nodes.get(i,{}).get('deps',[]):
+        if None in {k.get('kind') for k in d.get('dep_kinds',[])}: walk(d['pkg'])
+for p in m['packages']:
+    if p['name'].startswith('mediacore'): walk(p['id'])
+for i in seen:
+    n=pkgs[i]['name']
+    if not n.startswith('mediacore'): print(n)
+" 2>/dev/null)
+    if [[ -n "$absent" ]]; then
+      fail "acknowledgements name everything that ships" "$absent"
+    else
+      pass "acknowledgements name everything that ships"
+    fi
+  fi
+
   # A shipped bundle must carry its own libraries, or it only runs here.
   if [[ -d "$APP/Contents/Frameworks" ]] && ls "$APP"/Contents/Frameworks/*.dylib >/dev/null 2>&1; then
     strays=$(otool -L "$APP/Contents/MacOS/Editor" | grep -E "^\s+/(opt|usr/local)/" | head -5)

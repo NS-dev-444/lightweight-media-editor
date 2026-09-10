@@ -64,6 +64,7 @@ mediacore-model checks   for x86_64-pc-windows-msvc (R-21)
 loudness agrees with     FFmpeg's ebur128 to 0.04 LU
 transcription is         100% word-accurate on the known-speech fixture
 every binary targets      macOS 14.0, asserted against the plist (R-27)
+attribution ships         for all 16 components, and the build fails without it
 ```
 
 Run them all with **one command**, which is also the only thing CI runs:
@@ -99,17 +100,14 @@ tools/prep_corpus.sh            # test fixtures
    amendment (VP8/VP9 are royalty-free, so the hardware-only rationale does not
    reach them).
 3. **Merge keeps no audio on its re-encode path** — it should resample and mix.
-4. **MIT attribution for whisper.cpp and the Whisper model** must appear in the
-   app's acknowledgements before any release
-   (`DEPENDENCY_AND_LICENSE_AUDIT.md` §8). This is the next release blocker.
-5. **No app icon, no installer, no first-run experience.** None started.
+4. **No app icon, no installer, no first-run experience.** None started.
 
 ## Decisions still yours
 
 | # | Question |
 |---|---|
 | O-17 | Free-tier volume vs per-copy AVC/HEVC royalties — blocks pricing. |
-| — | Developer ID signing and notarization (needs a paid Apple account). |
+| — | Developer ID signing and notarization (needs a paid Apple account). **Now the only remaining release blocker that is code-adjacent.** |
 | — | Counsel on O-5/O-6/O-7 before any public distribution. |
 | — | **Voiceover recording is written but never exercised.** Testing it means
       recording from your microphone, which is not something to do while you are

@@ -234,10 +234,13 @@ comparison worth making explicitly.
 
 ### Attribution obligations
 
-MIT requires the copyright notice and permission text to be distributed with the
-software. Both whisper.cpp's and OpenAI's notices must appear in the app's
-acknowledgements, alongside FFmpeg's LGPL notice. **Not yet done** — tracked in
-§8's release checklist.
+✅ **DONE, 2026-09-10.** Both notices ship, alongside FFmpeg's and LAME's LGPL
+texts and every Rust crate's licence — see §7b.
+
+OpenAI's licence text was fetched from `github.com/openai/whisper` and checked
+against the claim above: "MIT License / Copyright (c) 2022 OpenAI". It is
+committed at `third_party/licences/whisper-model-openai.txt`, because unlike the
+others it is not produced by a build we run.
 
 ### Why this is not a patent question
 
@@ -259,6 +262,64 @@ build script's own check caught immediately. That is the check working.
 
 ---
 
+## 7b. Attribution — how it is discharged
+
+✅ **DONE, 2026-09-10.**
+
+Both licences we ship under require notices to travel with the software:
+
+- **MIT** — the copyright and permission notices must accompany all copies.
+- **LGPL §6** — the licence text, prominent notice that the libraries are used,
+  and the user's ability to relink with their own build.
+
+### It is generated, never maintained
+
+`tools/gather_licences.py` builds the acknowledgements from **the artefacts that
+actually ship**: the dylibs present in the bundle, the crates `cargo metadata`
+reports in the normal dependency closure, and the licence texts carried in the
+build prefixes.
+
+A hand-kept NOTICE file is wrong the day after somebody adds a dependency, and
+nobody notices because nothing checks it. This cannot drift — add a crate and it
+appears; remove a library and it goes.
+
+**Build-only dependencies are deliberately excluded.** cbindgen runs at build
+time and none of its code reaches a user, so attributing it would be padding
+rather than compliance.
+
+### Two gates, because one is not enough
+
+| Layer | Behaviour |
+|---|---|
+| `app/macos/build_app.sh` | **The build fails** if any shipping component has no licence text. Verified by hiding one: exit 1, "something ships unattributed". |
+| `tools/check.sh` | Asserts the file is in the bundle and **names every dylib, the model, and every crate**. Verified to fail by the same means. |
+
+The second exists for the stale case: a bundle built before a dependency was
+added and then checked without rebuilding.
+
+### What ships, and under what
+
+| Component | Licence |
+|---|---|
+| FFmpeg 8.1.2 (7 libraries) | LGPL v2.1+ |
+| LAME 3.100 | LGPL v2.1+ |
+| whisper.cpp v1.9.3 + ggml | MIT |
+| Whisper model weights | MIT (OpenAI) |
+| 12 Rust crates | MIT / Apache-2.0 / Unlicense; `unicode-ident` also Unicode-3.0 |
+
+The LGPL text appears once and is referenced by both LGPL components, which is
+what the licence requires — not one copy per library.
+
+### The relinking right, stated explicitly
+
+LGPL §6 is satisfied by shipping FFmpeg and LAME as **separate dynamic
+libraries** in `Contents/Frameworks`, which a user may replace with their own
+build. The acknowledgements say so in those words, name the exact versions, and
+point at both the upstream source and `third_party/ffmpeg/build.sh` — noting
+that it applies no patches.
+
+---
+
 ## 7. CI enforcement
 
 Licence discipline that depends on engineers remembering it will fail. The following are **build-blocking gates**, to be implemented in Phase 1:
@@ -276,9 +337,8 @@ Gate 6's last clause matters: because we build the FFmpeg dylibs ourselves and s
 
 ## 8. Release checklist (licence portion)
 
-- [ ] **whisper.cpp and Whisper model attribution** in the acknowledgements —
-      MIT requires both notices to ship (§6b). Added to this list when
-      transcription landed; not yet done.
+- [x] **Attribution for everything that ships** — generated, gated, and shown
+      in the app under Editor ▸ Acknowledgements (§7b).
 
 Before any public build ships:
 

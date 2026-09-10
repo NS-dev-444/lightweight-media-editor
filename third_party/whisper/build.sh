@@ -65,5 +65,10 @@ cmake -S "$SRC" -B "$SRC/build" \
 cmake --build "$SRC/build" --config Release -j"$(sysctl -n hw.ncpu)" >/dev/null
 cmake --install "$SRC/build" >/dev/null
 
+# The licence travels with the artifact — same reasoning as the FFmpeg build.
+mkdir -p "$OUT/share/licences"
+cp "$SRC/LICENSE" "$OUT/share/licences/whisper.cpp-MIT.txt"
+printf 'whisper.cpp %s (%s)\n' "$TAG" "$COMMIT" > "$OUT/share/licences/VERSIONS.txt"
+
 echo "==> installed to $OUT"
 ls "$OUT/lib" | sed 's/^/    /'

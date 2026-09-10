@@ -41,14 +41,26 @@ struct EditorApp: App {
                 .background(ShortcutCatcher(doc: doc))
         }
         .commands { EditorCommands(doc: doc) }
+
+        // A separate window rather than a sheet: licence texts are long, and
+        // people reading them want to keep them open beside their work.
+        Window("Acknowledgements", id: "acknowledgements") {
+            AcknowledgementsView()
+        }
+        .defaultSize(width: 720, height: 560)
     }
 }
 
 /// §29's shortcut set, using platform-native conventions.
 struct EditorCommands: Commands {
     @ObservedObject var doc: EditorDocument
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        // Under the app menu, next to About, which is where macOS users look.
+        CommandGroup(after: .appInfo) {
+            Button("Acknowledgements…") { openWindow(id: "acknowledgements") }
+        }
         CommandGroup(replacing: .newItem) {
             Button("Open…") { doc.open() }.keyboardShortcut("o")
             Button("Import Media…") { doc.importMedia() }.keyboardShortcut("i")

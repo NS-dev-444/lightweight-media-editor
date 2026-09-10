@@ -115,6 +115,13 @@ swiftc -O -target "arm64-apple-macos$MACOS_DEPLOYMENT_TARGET" \
   -framework CoreFoundation -framework QuartzCore -framework IOSurface \
   -o "$APP/Contents/MacOS/Editor"
 
+# Acknowledgements. Generated from what is actually in the bundle, and the
+# build FAILS if anything ships without its licence text — MIT and LGPL both
+# require these notices to accompany the software.
+echo "==> acknowledgements"
+python3 "$ROOT/tools/gather_licences.py" "$APP/Contents/Resources/Acknowledgements.txt" \
+  || { echo "    FAILED: something ships unattributed"; exit 1; }
+
 echo "==> signing"
 # Library Validation requires every loaded dylib to share the host's TEAM ID.
 # AD-11's plan holds for release: we build the FFmpeg dylibs ourselves, so a

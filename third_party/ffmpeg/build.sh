@@ -275,5 +275,26 @@ configure:
 $(sed -n 's/^  configuration: *//p' "${WORK_DIR}/configure.log" 2>/dev/null || echo "  (see configure.log)")
 MANIFEST
 
+# The licence texts travel WITH the artifact, into the prefix.
+#
+# Not left in the unpacked source tree: CI caches the prefix and not the source,
+# so on a cache hit the source tree does not exist and the acknowledgements
+# generator would have had nothing to read. LGPL obliges us to ship these texts,
+# and an obligation that depends on a build directory surviving is one that will
+# eventually not be met.
+log "Installing licence texts"
+mkdir -p "${PREFIX}/share/licences"
+cp "${SRC_DIR}/COPYING.LGPLv2.1" "${PREFIX}/share/licences/FFmpeg-LGPL-2.1.txt"
+cp "${SRC_DIR}/LICENSE.md"       "${PREFIX}/share/licences/FFmpeg-LICENSE.md"
+if [[ -f "${WORK_DIR}/lame-${LAME_VERSION}/COPYING" ]]; then
+  cp "${WORK_DIR}/lame-${LAME_VERSION}/COPYING" "${PREFIX}/share/licences/LAME-LGPL-2.1.txt"
+fi
+# The version is recorded here too: an acknowledgement has to say WHICH version
+# it covers, and LGPL §6 requires pointing at the corresponding source.
+cat > "${PREFIX}/share/licences/VERSIONS.txt" <<VERS
+FFmpeg ${FFMPEG_VERSION}
+LAME ${LAME_VERSION}
+VERS
+
 log "Done. Prefix: ${PREFIX}"
 log "Now run: tools/license_gate.py --prefix ${PREFIX}"
