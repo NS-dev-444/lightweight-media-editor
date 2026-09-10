@@ -1,0 +1,106 @@
+# The FFmpeg-bound half of the Windows port.
+#
+# A SEPARATE workflow, and that is the whole point. It lives here because
+# ci.yml's `cancel-in-progress: true` cancels the entire run — every job in it —
+# whenever a newer push arrives. Job-level concurrency does not save you from
+# that: it governs queuing BETWEEN runs, not immunity from your own run being
+# cancelled.
+#
+# This build takes the better part of an hour, so any push during it won. Three
+# times. And because it never finished it never populated the cache, so the next
+# attempt started from scratch and was cancelled in turn — a livelock that looks
+# exactly like "the Windows build does not work".
+#
+# Its own workflow, its own concurrency, and it is never cancelled mid-build.
+name: windows-media
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Only what can actually change the answer. Documentation and Swift cannot.
+      - 'third_party/ffmpeg/**'
+      - 'core/**'
+      - 'tools/deployment.sh'
+      - 'tools/license_gate.py'
+      - '.github/workflows/windows-media.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: windows-media
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    # Still bring-up: it is allowed to fail without turning the repo red.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MSYS2 toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel git curl tar diffutils make nasm yasm pkg-config
+            mingw-w64-ucrt-x86_64-gcc
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          # The GNU target, deliberately — see the note on the build step.
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Cache FFmpeg
+        id: cache-ffmpeg-win
+        uses: actions/cache@v4
+        with:
+          path: build/ffmpeg-lgpl
+          key: ffmpeg-win-${{ hashFiles('third_party/ffmpeg/build.sh', 'tools/deployment.sh') }}
+
+      - name: Build FFmpeg (LGPL) under MSYS2
+        if: steps.cache-ffmpeg-win.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: third_party/ffmpeg/build.sh
+
+      # R-05 does not care which platform it is on.
+      - name: Licence gate
+        shell: msys2 {0}
+        run: python3 tools/license_gate.py --prefix build/ffmpeg-lgpl
+
+      - name: What the build actually produced
+        shell: msys2 {0}
+        run: |
+          echo "--- lib/"; ls -la build/ffmpeg-lgpl/lib | head -20
+          echo "--- bin/"; ls -la build/ffmpeg-lgpl/bin 2>/dev/null | head -10
+
+      - name: Build the media crate
+        shell: msys2 {0}
+        run: |
+          # MSYS2/UCRT64 builds FFmpeg with GCC, which produces GNU import
+          # libraries (libavcodec.dll.a). Rust's DEFAULT Windows target is MSVC,
+          # which needs COFF import libraries (avcodec.lib). Those do not link.
+          #
+          # So the GNU target is used here to match the toolchain that built the
+          # libraries. If a shipped Windows build ever needs MSVC — for the WinUI
+          # layer, most likely — FFmpeg has to be rebuilt with
+          # `--toolchain=msvc`, which is a separate piece of work.
+          export FFMPEG_INCLUDE_DIR="$(pwd)/build/ffmpeg-lgpl/include"
+          export FFMPEG_LIBS_DIR="$(pwd)/build/ffmpeg-lgpl/lib"
+          export FFMPEG_LINK_MODE=dynamic
+          cd core
+          cargo build -p mediacore-media --target x86_64-pc-windows-gnu
+
+      - name: Test the media crate
+        shell: msys2 {0}
+        run: |
+          export FFMPEG_INCLUDE_DIR="$(pwd)/build/ffmpeg-lgpl/include"
+          export FFMPEG_LIBS_DIR="$(pwd)/build/ffmpeg-lgpl/lib"
+          export FFMPEG_LINK_MODE=dynamic
+          export PATH="$(pwd)/build/ffmpeg-lgpl/bin:$PATH"
+          cd core
+          cargo test -p mediacore-media --target x86_64-pc-windows-gnu

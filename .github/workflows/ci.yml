@@ -51,66 +51,6 @@ jobs:
           fi
           echo "no warnings"
 
-  # The FFmpeg-bound half. This has NEVER built on Windows and is expected to
-  # fail — that is the point. `continue-on-error` keeps it from blocking the
-  # rest of CI while it is brought up; it comes off once it is green.
-  #
-  # docs/WINDOWS_BRINGUP.md §2 is the plan this is working through.
-  windows-media:
-    runs-on: windows-latest
-    timeout-minutes: 90
-    continue-on-error: true
-    # Its OWN concurrency group, and it is never cancelled mid-build.
-    #
-    # The workflow-level `cancel-in-progress` killed this job three times: it
-    # takes the better part of an hour, so any push during it wins. That is a
-    # livelock, not an inconvenience — the build never finishes, so it never
-    # populates the cache, so the next run starts from scratch and is cancelled
-    # in turn. A long job that feeds a cache has to be allowed to finish once.
-    concurrency:
-      group: windows-media
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: MSYS2 toolchain
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            base-devel git curl tar diffutils make nasm yasm pkg-config
-            mingw-w64-ucrt-x86_64-gcc
-
-      - name: Rust toolchain
-        run: rustup toolchain install stable --profile minimal
-
-      - name: Cache FFmpeg
-        id: cache-ffmpeg-win
-        uses: actions/cache@v4
-        with:
-          path: build/ffmpeg-lgpl
-          key: ffmpeg-win-${{ hashFiles('third_party/ffmpeg/build.sh', 'tools/deployment.sh') }}
-
-      - name: Build FFmpeg (LGPL) under MSYS2
-        if: steps.cache-ffmpeg-win.outputs.cache-hit != 'true'
-        shell: msys2 {0}
-        run: third_party/ffmpeg/build.sh
-
-      # R-05 does not care which platform it is: a GPL build must be refused
-      # here exactly as it is on macOS.
-      - name: Licence gate
-        shell: msys2 {0}
-        run: python3 tools/license_gate.py --prefix build/ffmpeg-lgpl
-
-      - name: Build the media crate
-        shell: bash
-        run: |
-          export FFMPEG_INCLUDE_DIR="$PWD/build/ffmpeg-lgpl/include"
-          export FFMPEG_LIBS_DIR="$PWD/build/ffmpeg-lgpl/lib"
-          export FFMPEG_LINK_MODE=dynamic
-          cd core && cargo build -p mediacore-media
-
   macos:
     runs-on: macos-15
     timeout-minutes: 90
