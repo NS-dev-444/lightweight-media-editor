@@ -130,7 +130,15 @@ Non-negotiable, exactly as on macOS:
 - **never** `--enable-gpl`, `--enable-nonfree`, `--enable-version3`
 - **never** `libx264`, `libx265`, `libfdk-aac`
 - LAME **is** required (LGPL) — without it there is no MP3 export (§4)
-- `nvenc` / `qsv` / `amf` stay **disabled** until the 🔍 VERIFY entries in `DEPENDENCY_AND_LICENSE_AUDIT.md` §3.3 are cleared
+- **`nvenc` and `amf` are now cleared on copyright** (§3.3a, verified 2026-09-10
+  against our pinned FFmpeg). Enabling them needs `nv-codec-headers` added to
+  this build — a build task, not a licensing one. Do it AFTER the base Windows
+  build is proven; adding a dependency to a build that has never succeeded makes
+  two unknowns out of one.
+- **`qsv` stays disabled.** It links `libmfx` rather than loading the driver's
+  encoder, which is a real redistribution question and still open. An Intel-only
+  machine therefore has no hardware encoder until that is answered — a gap worth
+  stating rather than papering over.
 
 **Then run the gate:**
 ```

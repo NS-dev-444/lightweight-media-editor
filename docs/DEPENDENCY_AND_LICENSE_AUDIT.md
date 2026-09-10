@@ -116,15 +116,55 @@ configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/9.0.1 --enable-shared
 | `libfdk-aac` | nonfree | ⛔ DENIED | `--enable-nonfree` makes the binary non-redistributable. |
 | Anything requiring `--enable-nonfree` | nonfree | ⛔ DENIED | Non-redistributable, full stop. |
 | `videotoolbox` / `audiotoolbox` (macOS) | Apple system frameworks | ✅ CLEARED | Our primary macOS encode path. |
-| `nvenc` / `nvdec` | 🔍 VERIFY | 🔍 | Reported to be in neither the GPL nor the nonfree list; `nv-codec-headers` reported MIT. **Re-verify against our pinned FFmpeg version** before enabling. |
-| `qsv` (Intel, via oneVPL/libvpl) | 🔍 VERIFY | 🔍 | Verify the runtime's licence and its redistribution terms. |
-| `amf` (AMD) | 🔍 VERIFY | 🔍 | Verify the AMF headers/runtime licence. |
-| `d3d11va` / `dxva2` | Windows system APIs | 🔍 VERIFY | Expected clean; confirm no SDK redistribution obligation. |
+| `nvenc` / `nvdec` | headers MIT | ✅ **CLEARED (copyright)** | Verified 2026-09-10 against our pinned FFmpeg 8.1.2 — see §3.3a. `nvenc_deps="ffnvcodec"` (MIT headers, build-time only) + `LoadLibrary` at runtime: the encoder is in the **user's driver**, nothing of NVIDIA's is redistributed. Structurally identical to VideoToolbox. |
+| `amf` (AMD) | headers MIT | ✅ **CLEARED (copyright)** | Same shape: `amf_deps_any="libdl LoadLibrary"` — runtime load from the user's driver, nothing redistributed. |
+| `qsv` (Intel, via oneVPL/libvpl) | 🔍 VERIFY | 🔍 | **The one that is genuinely different.** `qsv_deps="libmfx"` — it *links* a library rather than loading the driver's. That is a real redistribution question and it is still open. |
+| `d3d11va` / `dxva2` | Windows system APIs | ✅ **CLEARED** | Neither in the GPL nor the nonfree list in our pinned version. Decode only. |
 | `libdav1d` (AV1 decode) | BSD-2-Clause | 🔍 VERIFY | Expected permissive. |
 | `libsvtav1` (AV1 encode) | BSD-3-Clause + AOMedia Patent Licence | 🔍 VERIFY | Expected permissive; note patent grant terms. |
 | `libopus` | BSD-3-Clause | 🔍 VERIFY | Expected permissive. |
 | Native FFmpeg AAC encoder | LGPL (code) | ✅ CLEARED (copyright) / ⚖️ COUNSEL (patents) | Copyright fine; AAC patents are a separate matter (§6). |
 | `aac_at` (AudioToolbox AAC) | Apple system framework | ✅ CLEARED | Confirmed present in our build. Apple's AAC encoder is generally higher quality than FFmpeg's native one — prefer it on macOS. |
+
+### 3.3a How the Windows encoders were verified — 2026-09-10
+
+§3.3 asked for re-verification "against our pinned FFmpeg version". Done, by
+reading FFmpeg 8.1.2's own `configure` rather than trusting a report:
+
+```
+                gpl_list  nonfree_list
+  nvenc            0          0
+  nvdec            0          0
+  qsv              0          0
+  amf              0          0
+  d3d11va          0          0
+  dxva2            0          0
+  videotoolbox     0          0
+  libx264          1          0     <- control
+  libfdk_aac       0          1     <- control
+```
+
+The last two are controls: a method that finds nothing proves nothing, so it had
+to place the two components we already know are GPL and nonfree.
+
+**Three questions were tangled under one 🔍, and they have different answers:**
+
+1. **Does enabling them make the build GPL or nonfree?** No — verified above.
+2. **Do we redistribute anything of the vendor's?** No for **nvenc** and **amf**:
+   MIT headers at build time, and the encoder itself is loaded from the user's
+   own graphics driver at runtime. Yes, possibly, for **qsv**, which links
+   `libmfx` — that one stays open.
+3. **AVC/HEVC patents?** This is **the same question as macOS**, which already
+   ships VideoToolbox with O-5 unresolved. The argument is identical on both:
+   the encoder is the OS's or the driver's, not in our binary. It is one
+   question, not two — and per the scope note it is dormant while nothing is
+   distributed.
+
+**Consequence:** Windows video export via nvenc/amf is a **build task**, not a
+licensing blocker. It needs `nv-codec-headers` added to the Windows FFmpeg
+build. An Intel-only machine would have no hardware encoder until qsv's
+redistribution question is answered, and that gap should be stated rather than
+papered over.
 
 ### 3.4 Verified in Phase 1: the MP3 encoding gap
 

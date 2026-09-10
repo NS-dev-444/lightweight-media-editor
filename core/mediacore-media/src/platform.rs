@@ -48,12 +48,20 @@ pub const HW_PIX_FMT: ffi::AVPixelFormat = ffi::AV_PIX_FMT_NONE;
 /// that is what bounds the patent exposure in the licence audit, and it is a
 /// policy rather than a performance choice.
 ///
-/// **Windows is deliberately empty.** `nvenc`, `qsv` and `amf` are the hardware
-/// encoders there, and all three are still 🔍 VERIFY in
-/// `DEPENDENCY_AND_LICENSE_AUDIT.md` §3.3. Listing them here would be the easy
-/// way to make Windows export "work" and would put an uncleared licensing
-/// question into shipped code. Encoding on Windows is blocked on that review,
-/// not on this function.
+/// **Windows is empty for now, but not for the reason first assumed.** The
+/// audit's §3.3a verified `nvenc` and `amf` against our pinned FFmpeg: neither
+/// is in the GPL or nonfree list, both take MIT headers at build time, and both
+/// load the actual encoder from the **user's own graphics driver** at runtime.
+/// That is structurally identical to VideoToolbox, which macOS already ships.
+///
+/// So this is a **build task, not a licensing blocker**: the Windows FFmpeg
+/// build needs `nv-codec-headers` before these names resolve to anything. They
+/// go in the list when that lands, and `find_encoder` will pick whichever the
+/// machine actually has.
+///
+/// `qsv` stays out regardless for now — it *links* `libmfx` rather than loading
+/// the driver's, which is a genuine redistribution question and the one thing
+/// here that is materially different.
 pub fn video_encoders(hevc: bool) -> &'static [&'static CStr] {
     #[cfg(target_os = "macos")]
     {
@@ -101,9 +109,8 @@ pub fn no_encoder_message() -> &'static str {
     #[cfg(target_os = "macos")]
     { "This Mac cannot encode that format." }
     #[cfg(target_os = "windows")]
-    { "Video export is not available on Windows in this build. \
-       The hardware encoders this machine may have are pending a licensing \
-       review; see the project's dependency audit." }
+    { "Video export is not available on Windows in this build yet. \
+       Support for this machine's graphics hardware is still being added." }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     { "No supported hardware video encoder was found on this system." }
 }
