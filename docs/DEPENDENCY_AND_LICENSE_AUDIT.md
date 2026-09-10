@@ -7,6 +7,23 @@
 
 ---
 
+> ### Scope note — 2026-09-10
+>
+> **This product is not currently distributed.** Almost every obligation in this
+> document attaches to *distribution*: LGPL's notice and relinking duties, the
+> AVC/HEVC per-copy royalties in §6, and the attribution in §7b all trigger when
+> a copy reaches somebody else. Building and using it in-house triggers none of
+> them.
+>
+> **The audit stands anyway, and the compliance work stays in place.** Not out of
+> caution for its own sake — because the expensive half of compliance is the half
+> that must be designed in. An LGPL-clean FFmpeg cannot be retrofitted onto a
+> build that linked libx264; attributions cannot be reconstructed for a
+> dependency list nobody kept. Both are done, gated, and cost nothing to keep.
+>
+> If distribution is ever considered, this document is current and the open
+> items (O-5, O-6, O-7) resume exactly as written.
+
 ## 1. Audit status legend
 
 | Status | Meaning |

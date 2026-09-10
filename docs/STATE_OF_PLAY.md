@@ -104,16 +104,36 @@ tools/prep_corpus.sh            # test fixtures
 3. **Merge keeps no audio on its re-encode path** — it should resample and mix.
 4. **No app icon, no installer, no first-run experience.** None started.
 
+## Scope decision: personal use — 2026-09-10
+
+**The product is not being distributed.** That is a decision, not a delay, and it
+retires most of what was outstanding — because nearly every open legal item
+attaches to *distribution*, not to building or using:
+
+| Was blocking | Now |
+|---|---|
+| O-5, O-6 — AVC/HEVC royalties | **Dormant.** Royalties attach per copy distributed. None are. |
+| O-7 — LGPL compliance review | **Dormant.** LGPL obligations attach on distribution. |
+| O-17 — free-tier volume vs royalties | **Dormant.** It was a pricing input; there is no pricing. |
+| Mac App Store vs LGPL | **Moot.** No channel, no conflict. |
+| Notarization | **Optional.** Gatekeeper matters for *other people's* Macs. |
+
+**Dormant, not deleted.** If this is ever distributed, every one of them returns
+exactly as written, and the work already done is what makes that cheap: the
+FFmpeg build is LGPL-clean and gated, the attributions are generated and
+verified, and the app is Developer ID signed with the hardened runtime on. The
+expensive part of compliance is the part that has to be designed in, and it was.
+
 ## Decisions still yours
 
 | # | Question |
 |---|---|
-| O-17 | Free-tier volume vs per-copy AVC/HEVC royalties — blocks pricing. |
-| — | Developer ID signing and notarization (needs a paid Apple account). **Now the only remaining release blocker that is code-adjacent.** |
-| — | Counsel on O-5/O-6/O-7 before any public distribution. |
-| — | **Voiceover recording is written but never exercised.** Testing it means
-      recording from your microphone, which is not something to do while you are
-      away from the machine. Press ⌘R and check. |
+| — | **Nothing is blocking.** Everything above is dormant while this stays personal. |
+| O-18 | ✅ Resolved — `ggml-base-q5_1`, 57 MB, bundled. |
+
+The one thing only you can do is **test voiceover recording** (⌘R). It is the
+single feature written but never exercised, because trying it means recording
+from your microphone.
 
 ## What measurement changed
 
