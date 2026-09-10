@@ -29,7 +29,9 @@ code behind them. Phase 4 closed that, Phase 7 closed captions.
 the app bundle, the caption model and the generated fixtures are all excluded;
 what is committed is 120 files of source, scripts and documentation.
 
-CI runs `tools/check.sh` on every push (`CI.md`).
+CI runs `tools/check.sh` on every push and is **green** — 13 checks on a clean
+runner, building FFmpeg, whisper.cpp and the model from nothing in about eleven
+minutes (`CI.md`).
 
 ## The app today
 

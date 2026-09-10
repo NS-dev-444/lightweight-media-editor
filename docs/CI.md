@@ -82,6 +82,11 @@ something on purpose:
 The licence gate also **fails closed**: a missing or unreadable target exits
 non-zero rather than reporting success.
 
+## Status
+
+Green, on a clean `macos-15` runner: 13 checks, 150 Rust tests, 468 Swift
+checks, in about eleven minutes from nothing.
+
 ## Caching
 
 FFmpeg, whisper.cpp and the caption model are cached against the **hash of their
@@ -89,6 +94,11 @@ build scripts**, so editing a build script — including its licence flags — b
 the cache and forces a rebuild. That is the behaviour R-05 needs: a change to the
 configure flags must never be validated against a cached artefact built with the
 old ones.
+
+It is also why the licence texts are installed **into the build prefixes** rather
+than left in the unpacked source trees: only the prefix is cached, so on a cache
+hit the source tree does not exist. An obligation that depends on a build
+directory surviving is one that eventually is not met.
 
 ## The first run failed, and that was correct
 
