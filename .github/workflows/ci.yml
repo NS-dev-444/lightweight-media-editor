@@ -16,6 +16,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Windows is V1.1 (O-1), but R-21 is about the port not decaying into a
+  # rewrite while macOS moves. A cross-COMPILE check from a Mac proves the code
+  # type-checks; it does not prove it works. Paths, line endings and integer
+  # widths all type-check perfectly and then behave differently.
+  #
+  # A real runner costs nothing and turns "it should port" into "108 tests pass
+  # on Windows". The FFmpeg-bound crate still needs the toolchain work in
+  # docs/WINDOWS_BRINGUP.md; this covers the half that does not.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Build and test the model crate, natively
+        working-directory: core
+        run: |
+          cargo build -p mediacore-model --all-targets
+          cargo test -p mediacore-model
+
+      - name: No warnings (§46 Rule 4)
+        working-directory: core
+        shell: bash
+        run: |
+          out=$(cargo build -p mediacore-model --all-targets 2>&1)
+          if echo "$out" | grep -q '^warning'; then
+            echo "$out" | grep -A3 '^warning' | head -20
+            echo "::error::warnings on Windows"
+            exit 1
+          fi
+          echo "no warnings"
+
   macos:
     runs-on: macos-15
     timeout-minutes: 90
