@@ -322,10 +322,8 @@ pub unsafe extern "C" fn mc_audio_convert_open(input: *const c_char,
         MC_AUDIO_WAV => ffi::avcodec_find_encoder(ffi::AV_CODEC_ID_PCM_S16LE),
         MC_AUDIO_FLAC => ffi::avcodec_find_encoder(ffi::AV_CODEC_ID_FLAC),
         MC_AUDIO_ALAC => ffi::avcodec_find_encoder(ffi::AV_CODEC_ID_ALAC),
-        _ => {
-            let at = ffi::avcodec_find_encoder_by_name(c"aac_at".as_ptr());
-            if at.is_null() { ffi::avcodec_find_encoder(ffi::AV_CODEC_ID_AAC) } else { at }
-        }
+        _ => crate::platform::find_encoder(crate::platform::aac_encoders())
+                .map(|(c, _)| c).unwrap_or(ptr::null()),
     };
     if codec.is_null() {
         ffi::avformat_free_context(fmt);

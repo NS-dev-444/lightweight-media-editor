@@ -178,6 +178,18 @@ typedef struct MCImage {
     int64_t bytes;
 } MCImage;
 
+
+
+
+
+
+
+
+
+
+
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus

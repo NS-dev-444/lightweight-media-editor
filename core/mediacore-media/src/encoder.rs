@@ -69,12 +69,9 @@ pub unsafe extern "C" fn mc_encoder_open(path: *const c_char,
     let height = height & !1;
 
     let cpath = CStr::from_ptr(path);
-    let name = match codec_kind {
-        MC_CODEC_H264 => c"h264_videotoolbox",
-        _ => c"hevc_videotoolbox",
-    };
-    let codec = ffi::avcodec_find_encoder_by_name(name.as_ptr());
-    if codec.is_null() { return ptr::null_mut(); }
+    let Some((codec, _)) = crate::platform::find_encoder(
+        crate::platform::video_encoders(codec_kind != MC_CODEC_H264))
+    else { return ptr::null_mut() };
 
     let mut fmt: *mut ffi::AVFormatContext = ptr::null_mut();
     if ffi::avformat_alloc_output_context2(&mut fmt, ptr::null_mut(),
@@ -94,19 +91,19 @@ pub unsafe extern "C" fn mc_encoder_open(path: *const c_char,
     // from the GPU, which is exactly the copy S1 established we must avoid.
     let mut hw_device: *mut ffi::AVBufferRef = ptr::null_mut();
     let hw_ok = ffi::av_hwdevice_ctx_create(&mut hw_device,
-                    ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+                    crate::platform::HW_DEVICE_TYPE,
                     ptr::null(), ptr::null_mut(), 0) >= 0;
     if hw_ok {
         let frames_ref = ffi::av_hwframe_ctx_alloc(hw_device);
         if !frames_ref.is_null() {
             let frames_ctx = (*frames_ref).data as *mut ffi::AVHWFramesContext;
-            (*frames_ctx).format = ffi::AV_PIX_FMT_VIDEOTOOLBOX;
+            (*frames_ctx).format = crate::platform::HW_PIX_FMT;
             (*frames_ctx).sw_format = ffi::AV_PIX_FMT_BGRA;
             (*frames_ctx).width = width;
             (*frames_ctx).height = height;
             (*frames_ctx).initial_pool_size = 8;
             if ffi::av_hwframe_ctx_init(frames_ref) >= 0 {
-                (*enc).pix_fmt = ffi::AV_PIX_FMT_VIDEOTOOLBOX;
+                (*enc).pix_fmt = crate::platform::HW_PIX_FMT;
                 (*enc).hw_frames_ctx = ffi::av_buffer_ref(frames_ref);
             }
             let mut fr = frames_ref;
@@ -142,17 +139,16 @@ pub unsafe extern "C" fn mc_encoder_open(path: *const c_char,
 
     // The audio stream must exist BEFORE the header is written.
     //
-    // Prefer AAC via AudioToolbox: Phase 1 found `aac_at` present in our LGPL
+    // Prefer AAC via AudioToolbox where it exists (see platform.rs): Phase 1
+    // found it present in our LGPL
     // build, and Apple's encoder is generally better than FFmpeg's native AAC.
     // Falls back to the native one, which is equally LGPL-clean.
     let mut aenc: *mut ffi::AVCodecContext = ptr::null_mut();
     let mut audio_stream_index = -1;
     let mut audio_sample_fmt = ffi::AV_SAMPLE_FMT_FLTP;
     if audio_sample_rate > 0 {
-        let acodec = {
-            let at = ffi::avcodec_find_encoder_by_name(c"aac_at".as_ptr());
-            if at.is_null() { ffi::avcodec_find_encoder(ffi::AV_CODEC_ID_AAC) } else { at }
-        };
+        let acodec = crate::platform::find_encoder(crate::platform::aac_encoders())
+            .map(|(c, _)| c).unwrap_or(ptr::null());
         if !acodec.is_null() {
             // Ask the encoder which sample formats it accepts rather than
             // assuming. AudioToolbox's AAC takes s16 ONLY, so hard-coding FLTP
@@ -267,7 +263,7 @@ pub unsafe extern "C" fn mc_encoder_acquire(e: *mut MCEncoder,
     ffi::av_frame_unref(e.frame);
     if (*e.enc).hw_frames_ctx.is_null() { return -2; }
 
-    (*e.frame).format = ffi::AV_PIX_FMT_VIDEOTOOLBOX;
+    (*e.frame).format = crate::platform::HW_PIX_FMT;
     (*e.frame).width = (*e.enc).width;
     (*e.frame).height = (*e.enc).height;
     if ffi::av_hwframe_get_buffer((*e.enc).hw_frames_ctx, e.frame, 0) < 0 { return -3; }
@@ -419,13 +415,9 @@ pub unsafe extern "C" fn mc_encoder_frames(e: *const MCEncoder) -> i64 {
 /// by assuming a GPU or a codec exists.
 #[no_mangle]
 pub extern "C" fn mc_encoder_available(codec_kind: i32) -> i32 {
-    unsafe {
-        let name = match codec_kind {
-            MC_CODEC_H264 => c"h264_videotoolbox",
-            _ => c"hevc_videotoolbox",
-        };
-        (!ffi::avcodec_find_encoder_by_name(name.as_ptr()).is_null()) as i32
-    }
+    crate::platform::find_encoder(
+        crate::platform::video_encoders(codec_kind != MC_CODEC_H264)
+    ).is_some() as i32
 }
 
 /// Unused today, but keeps `MCInfo` referenced so the header stays stable.

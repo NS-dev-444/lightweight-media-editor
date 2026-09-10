@@ -18,6 +18,7 @@ pub mod convert;
 pub mod transcode;
 pub mod merge;
 pub mod analysis;
+pub mod platform;
 pub mod transcribe;
 
 use rusty_ffmpeg::ffi;
@@ -40,7 +41,6 @@ pub unsafe extern "C" fn mc_set_log_quiet(quiet: i32) {
 
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
-    fn CFRetain(cf: *const c_void) -> *const c_void;
 }
 
 // ---------------------------------------------------------------- control plane
@@ -76,8 +76,8 @@ unsafe extern "C" fn get_hw_format(
     mut fmts: *const ffi::AVPixelFormat,
 ) -> ffi::AVPixelFormat {
     while *fmts != ffi::AV_PIX_FMT_NONE {
-        if *fmts == ffi::AV_PIX_FMT_VIDEOTOOLBOX {
-            return ffi::AV_PIX_FMT_VIDEOTOOLBOX;
+        if *fmts == crate::platform::HW_PIX_FMT {
+            return crate::platform::HW_PIX_FMT;
         }
         fmts = fmts.add(1);
     }
@@ -122,7 +122,7 @@ pub unsafe extern "C" fn mc_open(path: *const c_char) -> *mut MCDecoder {
     let mut hw_device: *mut ffi::AVBufferRef = ptr::null_mut();
     let hw_ok = ffi::av_hwdevice_ctx_create(
         &mut hw_device,
-        ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+        crate::platform::HW_DEVICE_TYPE,
         ptr::null(),
         ptr::null_mut(),
         0,
@@ -206,9 +206,9 @@ pub unsafe extern "C" fn mc_next_frame(
             let f = &*d.frame;
 
             // The hardware path: data[3] IS the CVPixelBufferRef VideoToolbox made.
-            if f.format == ffi::AV_PIX_FMT_VIDEOTOOLBOX && !f.data[3].is_null() {
+            if f.format == crate::platform::HW_PIX_FMT && !f.data[3].is_null() {
                 let pb = f.data[3] as *const c_void;
-                *out_pb = CFRetain(pb);
+                *out_pb = crate::platform::retain_frame_handle(pb);
             } else {
                 // Software fallback. Correct, but it means a CPU-side frame —
                 // which is exactly what the zero-copy design must avoid.
@@ -473,7 +473,7 @@ pub unsafe extern "C" fn mc_probe(
     }
 
     let mut hw_device: *mut ffi::AVBufferRef = ptr::null_mut();
-    if ffi::av_hwdevice_ctx_create(&mut hw_device, ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+    if ffi::av_hwdevice_ctx_create(&mut hw_device, crate::platform::HW_DEVICE_TYPE,
                                    ptr::null(), ptr::null_mut(), 0) >= 0 {
         (*dec).hw_device_ctx = ffi::av_buffer_ref(hw_device);
         (*dec).get_format = Some(get_hw_format);

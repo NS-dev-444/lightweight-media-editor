@@ -197,8 +197,8 @@ pub unsafe extern "C" fn mc_video_convert_open(input: *const c_char,
 
     // ---- video encoder ---------------------------------------------------
     let hevc = codec_kind != 1;
-    let name = if hevc { c"hevc_videotoolbox" } else { c"h264_videotoolbox" };
-    let enc_codec = ffi::avcodec_find_encoder_by_name(name.as_ptr());
+    let enc_codec = crate::platform::find_encoder(crate::platform::video_encoders(hevc))
+        .map(|(c, _)| c).unwrap_or(ptr::null());
     if enc_codec.is_null() {
         ffi::avformat_free_context(out_fmt);
         let mut d = dec; ffi::avcodec_free_context(&mut d);
@@ -274,10 +274,8 @@ pub unsafe extern "C" fn mc_video_convert_open(input: *const c_char,
             // BEFORE creating the stream, so a failure leaves no half-formed
             // stream behind for the muxer to choke on.
             let d_codec = ffi::avcodec_find_decoder((*a_par).codec_id);
-            let e_codec = {
-                let at = ffi::avcodec_find_encoder_by_name(c"aac_at".as_ptr());
-                if at.is_null() { ffi::avcodec_find_encoder(ffi::AV_CODEC_ID_AAC) } else { at }
-            };
+            let e_codec = crate::platform::find_encoder(crate::platform::aac_encoders())
+                .map(|(c, _)| c).unwrap_or(ptr::null());
             if !d_codec.is_null() && !e_codec.is_null() {
                 let d = ffi::avcodec_alloc_context3(d_codec);
                 ffi::avcodec_parameters_to_context(d, a_par);
