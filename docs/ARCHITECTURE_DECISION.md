@@ -109,6 +109,41 @@ This was demonstrated: `mediacore-model` compiles for `x86_64-pc-windows-msvc` f
 
 ---
 
+> ### Windows half decided, 2026-09-11 — **WinUI 3 + `SwapChainPanel`**
+>
+> AD-2 named WinUI 3 as the likely Windows choice and left it to S5 to confirm.
+> The context changed: Windows is now the **target** platform rather than V1.1,
+> and the machine is known (an RTX 5080), which removes the performance half of
+> the question entirely. What remained was the framework.
+>
+> **The decisive axis is the zero-copy video path, not the look.** S1 established
+> that a 4K frame must never make a CPU round trip. On Windows the equivalent of
+> the VideoToolbox→Metal path is NVDEC→D3D11 texture→swapchain, and
+> `SwapChainPanel` is the interface Windows provides precisely for that. The
+> alternative considered — a Rust UI on `egui`/`wgpu` — is more attractive on
+> every other axis: no FFI at all, one shader language instead of a third
+> (retiring R-20's divergence risk), a single .exe instead of Windows App SDK
+> deployment, and a language already in this project. It was rejected on one
+> point: **wgpu's external-texture import is limited**, and importing an
+> NVDEC-produced D3D11 texture may force exactly the GPU→CPU→GPU copy S1 ruled
+> out. That is an unknown at the centre of the performance-critical path, and
+> the brief was "whatever works best on Windows".
+>
+> **The cost being accepted, stated plainly:** C# and XAML, a third binding
+> layer, and Windows App SDK deployment. The binding cost is smaller than it
+> first looks — the C ABI already exists and the Swift app proves it is
+> sufficient for a complete UI, so the P/Invoke layer is mechanical rather than
+> a design problem.
+>
+> **What "write once" would have bought, and why it is not persuasive here:** the
+> Swift UI already exists and is finished. Sharing a Rust UI across both
+> platforms only pays if that working, notarized macOS app is thrown away. It
+> should not be.
+>
+> **Reopen this if** the wgpu external-texture path is demonstrated to work
+> without a copy, or if a second Windows UI ever needs writing. It is a
+> reversible decision; nothing in the core depends on it.
+
 ## AD-3. What media backend? — **DECIDED**
 
 **Decision:** FFmpeg (`libavformat`, `libavcodec`, `libavfilter`, `libswscale`, `libswresample`), **dynamically linked**, built by us in an **LGPL-only configuration**, driven from Rust, running in a **separate media worker process**.

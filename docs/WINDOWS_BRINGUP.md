@@ -159,7 +159,7 @@ cargo build --release
 
 | Spike | Pass condition |
 |---|---|
-| **S5** | WinUI 3 + `SwapChainPanel` + Rust via P/Invoke + D3D11VA: 4K30 ≥29.5 fps, cold start ≤2.5 s, idle RSS ≤250 MB. **Decides AD-2's Windows half.** |
+| **S5** | **Re-scoped.** AD-2's Windows half is now decided (WinUI 3 + `SwapChainPanel`), and the target machine is an RTX 5080 — so "can Windows hit 4K30" is no longer the question. What S5 must still establish is that the **zero-copy path works end to end**: NVDEC → D3D11 texture → `SwapChainPanel`, with no CPU round trip. Measure on real hardware; a CI runner has no GPU and would measure WARP. |
 | **S9** | Hardware probe across ≥3 GPU configurations; must reject non-working paths, cache by GPU + driver version |
 | **S10** (Windows half) | 4K30 H.264 / 4K HEVC 10-bit / 4K60 on min-spec hardware. **Decides whether AD-5's Tier 2 proxies ship at all.** |
 | **S1** (Windows) | Zero-copy: D3D11 texture from decoder → `SwapChainPanel`, no CPU frame copies |
