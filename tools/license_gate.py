@@ -56,6 +56,18 @@ CONFIG_RE = re.compile(rb"--prefix=[ -~]{0,4000}")
 
 # --- extraction -----------------------------------------------------------
 
+# Windows consoles default to cp1252, which cannot encode the tick and cross
+# below. The gate then crashed on its own OUTPUT after reaching a verdict —
+# failing closed, which is the safe direction, but hiding which rule was
+# broken. A licence gate whose reasons are unreadable is half a gate.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+    TICK, CROSS = "\u2713", "\u2717"
+except (AttributeError, OSError):
+    TICK, CROSS = "OK", "XX"
+
+
 def config_from_binary(path: Path) -> str:
     """Read the configuration string by running `<ffmpeg> -version`."""
     try:
@@ -99,17 +111,35 @@ def config_from_prefix(prefix: Path) -> str:
 # --- checks ---------------------------------------------------------------
 
 def check_linkage(prefix: Path) -> list[str]:
-    """LGPL requires dynamic linking and unrenamed libraries."""
+    """LGPL requires dynamic linking and unrenamed libraries.
+
+    Windows lays this out differently enough to produce two FALSE POSITIVES in
+    the first version of this check, and a false positive here is expensive: it
+    blocks a compliant build and invites someone to weaken the gate.
+
+      * The DLLs live in **bin/**, not lib/ — so looking only in lib/ found no
+        shared library and reported "LGPL requires dynamic linking" about a
+        build that is dynamically linked.
+      * `libavcodec.dll.a` is an **import stub** for a DLL, not a static
+        library. Matching `lib*.a` counted it as static and reported a
+        "static-only build" — the exact opposite of the truth.
+    """
     problems = []
     libdir = prefix / "lib"
+    bindir = prefix / "bin"
     if not libdir.is_dir():
         return [f"no lib/ directory under {prefix}"]
 
     for name in EXPECTED_LIBS:
-        shared = list(libdir.glob(f"lib{name}*.dylib")) + \
-                 list(libdir.glob(f"lib{name}*.so*")) + \
-                 list(libdir.glob(f"{name}*.dll"))
-        static = list(libdir.glob(f"lib{name}*.a"))
+        shared = (list(libdir.glob(f"lib{name}*.dylib"))
+                  + list(libdir.glob(f"lib{name}*.so*"))
+                  + list(libdir.glob(f"{name}*.dll"))
+                  + list(libdir.glob(f"lib{name}*.dll"))
+                  + list(bindir.glob(f"{name}*.dll"))
+                  + list(bindir.glob(f"lib{name}*.dll")))
+        # A real static library, excluding MinGW import stubs (*.dll.a).
+        static = [p for p in libdir.glob(f"lib{name}*.a")
+                  if not p.name.endswith(".dll.a")]
         if not shared:
             problems.append(f"lib{name}: no shared library found (LGPL requires dynamic linking)")
         if static and not shared:
@@ -151,7 +181,7 @@ def main() -> int:
     if violations:
         print("\033[1;31mLICENCE GATE: FAIL\033[0m")
         for v in violations:
-            print(f"  ✗ {v}")
+            print(f"  {CROSS} {v}")
         print(
             "\nThis artifact must not be linked into the product or shipped.\n"
             "See docs/DEPENDENCY_AND_LICENSE_AUDIT.md §3 and RISK_REGISTER.md R-05.\n"
@@ -160,11 +190,11 @@ def main() -> int:
         return 1
 
     print("\033[1;32mLICENCE GATE: PASS\033[0m")
-    print("  ✓ no GPL flags        (--enable-gpl, --enable-version3)")
-    print("  ✓ no nonfree flags    (--enable-nonfree)")
-    print(f"  ✓ no denied components ({len(DENIED_COMPONENTS)} checked)")
+    print(f"  {TICK} no GPL flags        (--enable-gpl, --enable-version3)")
+    print(f"  {TICK} no nonfree flags    (--enable-nonfree)")
+    print(f"  {TICK} no denied components ({len(DENIED_COMPONENTS)} checked)")
     if args.prefix:
-        print("  ✓ dynamically linked, libraries unrenamed")
+        print(f"  {TICK} dynamically linked, libraries unrenamed")
     return 0
 
 
