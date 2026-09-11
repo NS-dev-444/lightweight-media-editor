@@ -24,6 +24,16 @@ FFMPEG_GPG_FINGERPRINT="FCF986EA15E6E293A5644F10B4322F04D67658D8"
 LAME_VERSION="3.100"
 LAME_SHA256="ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
 
+# NVIDIA's codec HEADERS — Windows only, and headers only.
+#
+# This is what lets FFmpeg build nvenc/nvdec. It ships nothing of NVIDIA's:
+# the encoder itself lives in the user's graphics driver and is loaded at
+# runtime with LoadLibrary. Verified against our pinned FFmpeg in
+# DEPENDENCY_AND_LICENSE_AUDIT.md §3.3a — nvenc is in neither the GPL nor the
+# nonfree list, and the headers are MIT.
+NVCODEC_VERSION="n9.1.23.3"
+NVCODEC_COMMIT="7c533c80e68e6a857807a180c771adc764203ef9"
+
 # Version rationale (RISK_REGISTER.md R-11): 8.1.x is the newest series with a
 # published Rust binding (rusty_ffmpeg 0.17.0+ffmpeg.8.1). ffmpeg-next targets
 # 3.4-8.0 and is in maintenance mode, so this pin deliberately favours
@@ -240,6 +250,32 @@ if ! ls "${PREFIX}"/lib/libmp3lame*."${SHLIB_EXT}" >/dev/null 2>&1 \
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. NVIDIA codec headers (Windows only)
+# ---------------------------------------------------------------------------
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    if [[ ! -f "${PREFIX}/include/ffnvcodec/nvEncodeAPI.h" ]]; then
+      log "Fetching nv-codec-headers ${NVCODEC_VERSION}"
+      NVSRC="${WORK_DIR}/nv-codec-headers"
+      if [[ ! -d "${NVSRC}/.git" ]]; then
+        rm -rf "${NVSRC}"
+        git clone --quiet --depth 1 --branch "${NVCODEC_VERSION}" \
+          https://github.com/FFmpeg/nv-codec-headers "${NVSRC}"
+      fi
+      have="$(cd "${NVSRC}" && git rev-parse HEAD)"
+      [[ "${have}" == "${NVCODEC_COMMIT}" ]] \
+        || die "nv-codec-headers: expected ${NVCODEC_COMMIT}, got ${have}"
+      # MIT, and the audit depends on it staying so.
+      grep -qi "MIT" "${NVSRC}/LICENSE" \
+        || die "nv-codec-headers LICENSE is no longer the MIT one the audit cleared"
+      make -C "${NVSRC}" install PREFIX="${PREFIX}" > "${WORK_DIR}/nvcodec-install.log" 2>&1 \
+        || { tail -20 "${WORK_DIR}/nvcodec-install.log"; die "nv-codec-headers install failed"; }
+      log "nv-codec-headers installed (commit ${have})"
+    fi
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
 # 3. Configure -- LGPL only
 # ---------------------------------------------------------------------------
 CONFIGURE_FLAGS=(
@@ -274,8 +310,20 @@ case "$(uname -s)" in
     ;;
   MINGW*|MSYS*|CYGWIN*)
     CONFIGURE_FLAGS+=(--enable-d3d11va --enable-dxva2)
-    # --enable-nvenc/--enable-qsv/--enable-amf are pending the VERIFY items in
-    # DEPENDENCY_AND_LICENSE_AUDIT.md §3.3. Do not add them until cleared.
+
+    # NVENC/NVDEC, if the headers built. Cleared on copyright in §3.3a: MIT
+    # headers at build time, the encoder loaded from the user's own driver at
+    # runtime, nothing of NVIDIA's redistributed.
+    #
+    # `qsv` and `amf` stay OUT. amf is the same shape and could be added; qsv
+    # LINKS libmfx rather than loading the driver's encoder, which is a real
+    # redistribution question and still open.
+    if [[ -f "${PREFIX}/include/ffnvcodec/nvEncodeAPI.h" ]]; then
+      CONFIGURE_FLAGS+=(--enable-nvenc --enable-nvdec)
+      log "NVENC/NVDEC enabled"
+    else
+      log "WARNING: nv-codec-headers absent; building without NVENC"
+    fi
     ;;
 esac
 

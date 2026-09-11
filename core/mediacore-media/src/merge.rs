@@ -269,7 +269,7 @@ unsafe fn build_encoder(m: &mut MCMerge) -> i32 {
     let par = (*st).codecpar;
     // HEVC by default: S4b measured it needing ~1.74x libx264's bitrate against
     // ~2.31x for hardware H.264, which makes it the better default here too.
-    let Some((codec, _)) = crate::platform::find_encoder(
+    let Some((codec, _)) = crate::platform::find_working_encoder(
         crate::platform::video_encoders(true)) else { return -1 };
     let fr = (*st).avg_frame_rate;
     let rate = if fr.num > 0 && fr.den > 0 { fr } else { ffi::AVRational { num: 30, den: 1 } };

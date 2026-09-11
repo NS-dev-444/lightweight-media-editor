@@ -20,6 +20,7 @@
 
 use rusty_ffmpeg::ffi;
 use std::ffi::CStr;
+use std::ptr;
 
 /// The hardware decode path to ask FFmpeg for.
 ///
@@ -67,7 +68,17 @@ pub fn video_encoders(hevc: bool) -> &'static [&'static CStr] {
     {
         if hevc { &[c"hevc_videotoolbox"] } else { &[c"h264_videotoolbox"] }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        // NVENC only, for now. `amf` is the same shape and could join it; `qsv`
+        // links libmfx rather than loading the driver's encoder, which is a
+        // redistribution question still open in the audit.
+        //
+        // A machine with an AMD or Intel GPU therefore has no hardware encoder
+        // and will be told so honestly — see `no_encoder_message`.
+        if hevc { &[c"hevc_nvenc"] } else { &[c"h264_nvenc"] }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = hevc;
         &[]
@@ -87,15 +98,74 @@ pub fn aac_encoders() -> &'static [&'static CStr] {
 
 /// The first available encoder from a preference list.
 ///
-/// Returns the codec and the name that matched, so a caller can say which one
-/// it got — "encoded with aac" versus "encoded with aac_at" is the kind of
-/// thing worth being able to answer without guessing.
+/// **Only says the encoder is COMPILED IN.** For audio that is enough. For
+/// video on Windows it is not — see `find_working_encoder`.
 pub fn find_encoder(names: &[&'static CStr])
     -> Option<(*const ffi::AVCodec, &'static CStr)>
 {
     for name in names {
         let c = unsafe { ffi::avcodec_find_encoder_by_name(name.as_ptr()) };
         if !c.is_null() { return Some((c, name)); }
+    }
+    None
+}
+
+/// Can this encoder actually be OPENED on this machine?
+///
+/// **AD-6: probe by actually looking, never by assuming a GPU exists.**
+///
+/// This matters on Windows in a way it never did on macOS. Our Windows build
+/// contains `nvenc` whether or not the machine has an NVIDIA card, so
+/// `avcodec_find_encoder_by_name` succeeds on an AMD or Intel machine and the
+/// failure only appears at `avcodec_open2` — which, without this, would be at
+/// the moment the user pressed Export on a finished edit.
+///
+/// The probe opens a tiny encoder and throws it away. That costs a few
+/// milliseconds once, and the answer is cached because opening a hardware
+/// encoder session is not free.
+unsafe fn encoder_opens(codec: *const ffi::AVCodec) -> bool {
+    let ctx = ffi::avcodec_alloc_context3(codec);
+    if ctx.is_null() { return false; }
+    // Small, even, and a rate every encoder accepts. This is a liveness check,
+    // not a representative encode.
+    (*ctx).width = 640;
+    (*ctx).height = 480;
+    (*ctx).time_base = ffi::AVRational { num: 1, den: 30 };
+    (*ctx).framerate = ffi::AVRational { num: 30, den: 1 };
+    (*ctx).pix_fmt = ffi::AV_PIX_FMT_NV12;
+    (*ctx).bit_rate = 1_000_000;
+    let ok = ffi::avcodec_open2(ctx, codec, ptr::null_mut()) >= 0;
+    let mut c = ctx;
+    ffi::avcodec_free_context(&mut c);
+    ok
+}
+
+/// The first encoder from the list that this machine can actually use.
+///
+/// Cached: the answer cannot change while the process is running, and probing
+/// a hardware encoder repeatedly is wasteful.
+pub fn find_working_encoder(names: &[&'static CStr])
+    -> Option<(*const ffi::AVCodec, &'static CStr)>
+{
+    use std::sync::OnceLock;
+    static CACHE: OnceLock<std::sync::Mutex<Vec<(&'static CStr, bool)>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+
+    for name in names {
+        let codec = unsafe { ffi::avcodec_find_encoder_by_name(name.as_ptr()) };
+        if codec.is_null() { continue; }
+
+        let cached = cache.lock().ok()
+            .and_then(|c| c.iter().find(|(n, _)| n == name).map(|(_, ok)| *ok));
+        let works = match cached {
+            Some(ok) => ok,
+            None => {
+                let ok = unsafe { encoder_opens(codec) };
+                if let Ok(mut c) = cache.lock() { c.push((name, ok)); }
+                ok
+            }
+        };
+        if works { return Some((codec, name)); }
     }
     None
 }
@@ -109,8 +179,9 @@ pub fn no_encoder_message() -> &'static str {
     #[cfg(target_os = "macos")]
     { "This Mac cannot encode that format." }
     #[cfg(target_os = "windows")]
-    { "Video export is not available on Windows in this build yet. \
-       Support for this machine's graphics hardware is still being added." }
+    { "This PC has no graphics card that can export video. \
+       An NVIDIA card is needed; support for AMD and Intel graphics is \
+       not in this build yet." }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     { "No supported hardware video encoder was found on this system." }
 }
@@ -161,14 +232,30 @@ mod tests {
     }
 
     #[test]
-    fn macos_has_hardware_video_encoders_and_windows_deliberately_does_not() {
-        let found = find_encoder(video_encoders(true));
+    fn the_hardware_encoder_this_machine_has_can_actually_be_opened() {
+        // The distinction this test exists for: find_encoder says "compiled
+        // in", find_working_encoder says "this machine can use it". On Windows
+        // our build contains nvenc regardless of the GPU, so the two answers
+        // differ on any AMD or Intel machine.
+        let compiled = find_encoder(video_encoders(true));
+        let usable = find_working_encoder(video_encoders(true));
+
         if cfg!(target_os = "macos") {
-            assert!(found.is_some(), "hevc_videotoolbox missing from this build");
-        } else {
-            // Not an oversight: §3.3's VERIFY items gate nvenc/qsv/amf.
-            assert!(found.is_none());
+            assert!(compiled.is_some(), "hevc_videotoolbox missing from this build");
+            assert!(usable.is_some(), "hevc_videotoolbox will not open on this Mac");
+        } else if compiled.is_some() && usable.is_none() {
+            // A legitimate state on Windows: the encoder is in the build, the
+            // machine cannot use it. The message must say something true.
             assert!(!no_encoder_message().is_empty());
         }
+    }
+
+    #[test]
+    fn probing_an_encoder_twice_gives_the_same_answer() {
+        // The result is cached; a cache that disagrees with itself would make
+        // export availability depend on when it was asked.
+        let a = find_working_encoder(video_encoders(true)).map(|(_, n)| n);
+        let b = find_working_encoder(video_encoders(true)).map(|(_, n)| n);
+        assert_eq!(a, b);
     }
 }

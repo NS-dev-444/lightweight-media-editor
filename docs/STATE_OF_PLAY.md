@@ -104,25 +104,31 @@ tools/prep_corpus.sh            # test fixtures
 3. **Merge keeps no audio on its re-encode path** — it should resample and mix.
 4. **No app icon, no installer, no first-run experience.** None started.
 
-## Scope decision: personal use — 2026-09-10
+## Scope: built for one Windows user — 2026-09-11
 
-**The product is not being distributed.** That is a decision, not a delay, and it
-retires most of what was outstanding — because nearly every open legal item
-attaches to *distribution*, not to building or using:
+**This app is for someone else, and they only have a Windows PC.** That changes
+two things that were previously written down wrongly here.
 
-| Was blocking | Now |
-|---|---|
-| O-5, O-6 — AVC/HEVC royalties | **Dormant.** Royalties attach per copy distributed. None are. |
-| O-7 — LGPL compliance review | **Dormant.** LGPL obligations attach on distribution. |
-| O-17 — free-tier volume vs royalties | **Dormant.** It was a pricing input; there is no pricing. |
-| Mac App Store vs LGPL | **Moot.** No channel, no conflict. |
-| Notarization | **Optional.** Gatekeeper matters for *other people's* Macs. |
+**Windows is the target platform, not V1.1.** macOS is the development
+environment. S5 — WinUI 3 + a D3D11 swapchain — decides AD-2's Windows half and
+is now on the critical path rather than deferred.
 
-**Dormant, not deleted.** If this is ever distributed, every one of them returns
-exactly as written, and the work already done is what makes that cheap: the
-FFmpeg build is LGPL-clean and gated, the attributions are generated and
-verified, and the app is Developer ID signed with the hardened runtime on. The
-expensive part of compliance is the part that has to be designed in, and it was.
+**A copy reaching another person is distribution.** An earlier version of this
+page said the licensing obligations were dormant because the app was staying
+in-house. That is no longer true, and O-5/O-6/O-7 are open again at low urgency.
+The expensive half of compliance is already done — see the audit's scope note.
+
+### What they need, against what exists
+
+Their use is social clips: editing, reframing, adding sound. That maps onto the
+ratified V1 almost exactly — trim and delete-range, reframe to 9:16, safe-area
+guides, titles, music with ducking and fit-to-length, captions, and export
+presets named by destination. **The Converter and most of Tools are not needed**
+and can be left out of the Windows UI.
+
+Their machine is an **RTX 5080**, which settles two open questions: NVENC is
+available so video export works (§3.3a), and S5's 4K30 target is not in doubt on
+that hardware — the remaining question is the UI framework, not the performance.
 
 ## Decisions still yours
 

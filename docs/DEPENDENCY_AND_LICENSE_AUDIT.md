@@ -7,13 +7,23 @@
 
 ---
 
-> ### Scope note — 2026-09-10
+> ### Scope note — 2026-09-11 (corrected)
 >
-> **This product is not currently distributed.** Almost every obligation in this
-> document attaches to *distribution*: LGPL's notice and relinking duties, the
-> AVC/HEVC per-copy royalties in §6, and the attribution in §7b all trigger when
-> a copy reaches somebody else. Building and using it in-house triggers none of
-> them.
+> **A copy IS going to another person.** The app is being built for someone else
+> to use on their own Windows PC, which means the obligations in this document
+> are **live, not dormant** — an earlier version of this note said otherwise and
+> was wrong. LGPL's notice and relinking duties and the attribution in §7b all
+> trigger the moment a copy reaches somebody else, whether or not money changes
+> hands.
+>
+> **Proportionately:** one copy to one known person is the lowest-stakes form of
+> distribution there is, and the parts that are expensive to retrofit are already
+> done — the FFmpeg build is LGPL-clean and gated, the attributions are generated
+> and verified, and the libraries ship as replaceable dylibs/DLLs. The AVC/HEVC
+> royalties in §6 attach per copy; at this volume they are far below any
+> threshold a pool would act on, but the obligation exists rather than not.
+>
+> O-5, O-6 and O-7 are therefore **open again**, at low urgency.
 >
 > **The audit stands anyway, and the compliance work stays in place.** Not out of
 > caution for its own sake — because the expensive half of compliance is the half

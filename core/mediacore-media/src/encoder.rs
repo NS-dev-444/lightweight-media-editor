@@ -69,7 +69,11 @@ pub unsafe extern "C" fn mc_encoder_open(path: *const c_char,
     let height = height & !1;
 
     let cpath = CStr::from_ptr(path);
-    let Some((codec, _)) = crate::platform::find_encoder(
+    // find_WORKING_encoder, not find_encoder: on Windows our build contains
+    // nvenc whether or not this machine has an NVIDIA card, and the difference
+    // only shows at avcodec_open2 — which without this would be the moment the
+    // user pressed Export on a finished edit.
+    let Some((codec, _)) = crate::platform::find_working_encoder(
         crate::platform::video_encoders(codec_kind != MC_CODEC_H264))
     else { return ptr::null_mut() };
 
@@ -415,7 +419,7 @@ pub unsafe extern "C" fn mc_encoder_frames(e: *const MCEncoder) -> i64 {
 /// by assuming a GPU or a codec exists.
 #[no_mangle]
 pub extern "C" fn mc_encoder_available(codec_kind: i32) -> i32 {
-    crate::platform::find_encoder(
+    crate::platform::find_working_encoder(
         crate::platform::video_encoders(codec_kind != MC_CODEC_H264)
     ).is_some() as i32
 }

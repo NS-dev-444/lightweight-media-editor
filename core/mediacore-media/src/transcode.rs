@@ -197,8 +197,8 @@ pub unsafe extern "C" fn mc_video_convert_open(input: *const c_char,
 
     // ---- video encoder ---------------------------------------------------
     let hevc = codec_kind != 1;
-    let enc_codec = crate::platform::find_encoder(crate::platform::video_encoders(hevc))
-        .map(|(c, _)| c).unwrap_or(ptr::null());
+    let enc_codec = crate::platform::find_working_encoder(
+        crate::platform::video_encoders(hevc)).map(|(c, _)| c).unwrap_or(ptr::null());
     if enc_codec.is_null() {
         ffi::avformat_free_context(out_fmt);
         let mut d = dec; ffi::avcodec_free_context(&mut d);
