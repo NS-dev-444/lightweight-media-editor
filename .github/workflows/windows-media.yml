@@ -53,6 +53,7 @@ jobs:
           install: >-
             base-devel git curl tar diffutils make nasm yasm pkg-config
             mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-clang
             python
             mingw-w64-x86_64-ffmpeg
 
@@ -94,6 +95,12 @@ jobs:
           # rustup installs into the Windows profile; the MSYS2 shell has its own
           # PATH and cannot see it. cygpath converts C:\Users\x to /c/Users/x.
           export PATH="$(cygpath -u "$USERPROFILE")/.cargo/bin:$PATH"
+          # bindgen runs libclang, and clang does not know where GCC keeps its
+          # own internal headers — so it fails on mm_malloc.h, which MinGW's
+          # malloc.h includes. `gcc -print-file-name=include` is GCC telling us
+          # exactly where that is, rather than a hardcoded version-numbered path
+          # that breaks on the next toolchain update.
+          export BINDGEN_EXTRA_CLANG_ARGS="-I$(gcc -print-file-name=include)"
           # MSYS2 builds FFmpeg with GCC, which produces GNU import
           # libraries (libavcodec.dll.a). Rust's DEFAULT Windows target is MSVC,
           # which needs COFF import libraries (avcodec.lib). Those do not link.
@@ -124,6 +131,7 @@ jobs:
         shell: msys2 {0}
         run: |
           export PATH="$(cygpath -u "$USERPROFILE")/.cargo/bin:$PATH"
+          export BINDGEN_EXTRA_CLANG_ARGS="-I$(gcc -print-file-name=include)"
           export FFMPEG_INCLUDE_DIR="$(pwd)/build/ffmpeg-lgpl/include"
           export FFMPEG_LIBS_DIR="$(pwd)/build/ffmpeg-lgpl/lib"
           export FFMPEG_LINK_MODE=dynamic
