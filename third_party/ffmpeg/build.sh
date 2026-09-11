@@ -266,10 +266,25 @@ case "$(uname -s)" in
       [[ "${have}" == "${NVCODEC_COMMIT}" ]] \
         || die "nv-codec-headers: expected ${NVCODEC_COMMIT}, got ${have}"
       # MIT, and the audit depends on it staying so.
-      grep -qi "MIT" "${NVSRC}/LICENSE" \
-        || die "nv-codec-headers LICENSE is no longer the MIT one the audit cleared"
+      #
+      # There is no LICENSE file: nv-codec-headers carries its notice INSIDE
+      # each header. Checking for a LICENSE file failed the build on a correctly
+      # licensed tree — a check that fires for the wrong reason is nearly as bad
+      # as one that does not fire at all, because the next person weakens it.
+      NVLICENCE="${NVSRC}/include/ffnvcodec/nvEncodeAPI.h"
+      grep -q "Permission is hereby granted, free of charge" "${NVLICENCE}" \
+        || die "nv-codec-headers no longer carries the MIT notice the audit cleared"
       make -C "${NVSRC}" install PREFIX="${PREFIX}" > "${WORK_DIR}/nvcodec-install.log" 2>&1 \
         || { tail -20 "${WORK_DIR}/nvcodec-install.log"; die "nv-codec-headers install failed"; }
+      # The notice travels with the artifact, like every other licence here.
+      # It is headers-only and nothing of NVIDIA's is redistributed, but the
+      # loader inlines code into libavcodec, so the notice ships.
+      mkdir -p "${PREFIX}/share/licences"
+      sed -n '/Permission is hereby granted, free of charge/,/DEALINGS IN THE SOFTWARE/p' \
+        "${NVLICENCE}" | sed 's|^[[:space:]]*\*[[:space:]]\{0,1\}||' \
+        > "${PREFIX}/share/licences/nv-codec-headers-MIT.txt"
+      printf 'nv-codec-headers %s (%s)\n' "${NVCODEC_VERSION}" "${have}" \
+        >> "${PREFIX}/share/licences/VERSIONS.txt"
       log "nv-codec-headers installed (commit ${have})"
     fi
     ;;

@@ -201,6 +201,23 @@ def main() -> int:
         else:
             missing.append("Whisper model MIT text")
 
+    # ---- NVIDIA codec headers (Windows builds only) -----------------------
+    #
+    # Headers, not a library: nothing of NVIDIA's is redistributed and the
+    # encoder is loaded from the user's driver. But the loader inlines code
+    # into libavcodec, so the notice ships. Cheap, and errs the right way.
+    nv = read(ff / "nv-codec-headers-MIT.txt")
+    if nv:
+        version = next((l for l in ff_versions.splitlines()
+                        if l.startswith("nv-codec-headers")), "nv-codec-headers")
+        out.append(rule(version + " — MIT License"))
+        out.append(
+            "NVIDIA's codec headers, used to build hardware video encoding and\n"
+            "decoding support. No NVIDIA software is included in this\n"
+            "application: the encoder lives in the graphics driver already\n"
+            "installed on this machine and is loaded at runtime.\n")
+        out.append(nv)
+
     # ---- Rust crates ------------------------------------------------------
     crates = shipped_crates()
     if crates:
