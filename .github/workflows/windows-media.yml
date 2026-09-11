@@ -40,16 +40,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # MINGW64, not UCRT64. Rust's x86_64-pc-windows-gnu target links against
+      # MSVCRT; MSYS2's UCRT64 environment builds against UCRT. Mixing two C
+      # runtimes in one binary gives you two heaps and two sets of FILE handles,
+      # and the failures are the kind that appear at runtime in one code path
+      # and nowhere else. MINGW64 is the MSVCRT environment, so it matches.
       - name: MSYS2 toolchain
         uses: msys2/setup-msys2@v2
         with:
-          msystem: UCRT64
+          msystem: MINGW64
           update: true
           install: >-
             base-devel git curl tar diffutils make nasm yasm pkg-config
-            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-x86_64-gcc
             python
-            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-x86_64-ffmpeg
 
       - name: Rust toolchain
         run: |
@@ -62,7 +67,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/ffmpeg-lgpl
-          key: ffmpeg-win-${{ hashFiles('third_party/ffmpeg/build.sh', 'tools/deployment.sh') }}
+          # The workflow file is in the key because it chooses the MSYS2
+          # environment. A UCRT64-built FFmpeg is not usable from MINGW64, and
+          # a key that ignored that would have served the wrong one forever.
+          key: ffmpeg-win-${{ hashFiles('third_party/ffmpeg/build.sh', 'tools/deployment.sh', '.github/workflows/windows-media.yml') }}
 
       - name: Build FFmpeg (LGPL) under MSYS2
         if: steps.cache-ffmpeg-win.outputs.cache-hit != 'true'
@@ -83,7 +91,10 @@ jobs:
       - name: Build the media crate
         shell: msys2 {0}
         run: |
-          # MSYS2/UCRT64 builds FFmpeg with GCC, which produces GNU import
+          # rustup installs into the Windows profile; the MSYS2 shell has its own
+          # PATH and cannot see it. cygpath converts C:\Users\x to /c/Users/x.
+          export PATH="$(cygpath -u "$USERPROFILE")/.cargo/bin:$PATH"
+          # MSYS2 builds FFmpeg with GCC, which produces GNU import
           # libraries (libavcodec.dll.a). Rust's DEFAULT Windows target is MSVC,
           # which needs COFF import libraries (avcodec.lib). Those do not link.
           #
@@ -112,6 +123,7 @@ jobs:
       - name: Test the media crate
         shell: msys2 {0}
         run: |
+          export PATH="$(cygpath -u "$USERPROFILE")/.cargo/bin:$PATH"
           export FFMPEG_INCLUDE_DIR="$(pwd)/build/ffmpeg-lgpl/include"
           export FFMPEG_LIBS_DIR="$(pwd)/build/ffmpeg-lgpl/lib"
           export FFMPEG_LINK_MODE=dynamic
