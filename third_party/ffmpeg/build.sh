@@ -350,6 +350,15 @@ for denied in "${DENIED_FLAGS[@]}"; do
 done
 
 cd "${SRC_DIR}"
+
+# FFmpeg finds ffnvcodec through PKG-CONFIG, not through --extra-cflags. The
+# headers install a .pc file into our own prefix, which pkg-config does not
+# search by default — so configure reported "nvdec requested, but not all
+# dependencies are satisfied: ffnvcodec" about headers that were sitting right
+# there. LAME is found through the -I/-L flags instead, which is why it worked
+# and this did not.
+export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+
 log "Configuring"
 ./configure "${CONFIGURE_FLAGS[@]}" > "${WORK_DIR}/configure.log" 2>&1 \
   || { tail -30 "${WORK_DIR}/configure.log"; die "configure failed (see ${WORK_DIR}/configure.log)"; }
