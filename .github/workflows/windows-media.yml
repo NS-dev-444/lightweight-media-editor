@@ -33,7 +33,12 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 120
+    # Was 120. windows-latest bills at 2x against the account's included Actions
+    # minutes, so a job that hangs to its ceiling spends 240 of the 2,000 — 12%
+    # of the month in one stuck build, and this workflow exists precisely
+    # because it once livelocked. Observed runs top out near 60 minutes with a
+    # cold FFmpeg cache, so 75 keeps the headroom and halves the worst case.
+    timeout-minutes: 75
     # Still bring-up: it is allowed to fail without turning the repo red.
     continue-on-error: true
 
