@@ -8,8 +8,13 @@ name: check
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Monday 06:00 UTC. The macOS leg runs here rather than on every push —
+    # see the comment on that job.
+    - cron: '0 6 * * 1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -51,9 +56,33 @@ jobs:
           fi
           echo "no warnings"
 
+  # macOS runs on tags, on the weekly schedule, and on demand — NOT on every
+  # push to main. It is billed at 10x against the account's included Actions
+  # minutes, so at ~3 minutes a run it cost ~30 included minutes every time
+  # anyone pushed, which is ~85% of this repository's Actions spend and enough
+  # on its own to exhaust the monthly allowance by the 11th.
+  #
+  # What is lost by not running it per-push is small and specific: this project
+  # is developed ON a Mac, and CI runs `tools/check.sh` — the same script that
+  # runs locally before every push. macOS is therefore the one platform already
+  # covered continuously outside CI. Windows is not, which is why the Windows
+  # leg above still runs on every push: that is where CI tells you something
+  # you did not already know.
+  #
+  # The weekly run is the safety net for the gap this opens — a macOS-only
+  # regression introduced without a local check surfaces within seven days
+  # instead of at release.
   macos:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event_name == 'schedule'
+      || startsWith(github.ref, 'refs/tags/')
     runs-on: macos-15
-    timeout-minutes: 90
+    # Was 90. A hung macOS job at 90 minutes spends 900 included minutes —
+    # nearly half the monthly allowance in one run. A cold FFmpeg cache build
+    # is ~10 minutes and a warm run is 1-6, so 30 is generous and caps the
+    # damage.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
